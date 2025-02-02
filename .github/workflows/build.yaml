@@ -4,16 +4,8 @@ on:
   workflow_dispatch:  # Manual trigger only
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            binary: sqlite-server-linux
-          - os: macos-latest
-            binary: sqlite-server-macos
-    runs-on: ${{ matrix.os }}
-
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
       with:
@@ -24,18 +16,45 @@ jobs:
       with:
         go-version: '1.21'
 
-    - name: Build
+    - name: Build Linux
       run: |
-        GOOS=${{ runner.os == 'Linux' && 'linux' || 'darwin' }} \
-        GOARCH=amd64 \
-        go build -v -o ${{ matrix.binary }}
+        GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
 
-    - name: Commit and push binary
+    - name: Commit and push Linux binary
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add ${{ matrix.binary }}
-        git commit -m "Update ${{ matrix.binary }} binary" || echo "No changes to commit"
+        git add sqlite-server-linux
+        git commit -m "Update sqlite-server-linux binary" || echo "No changes to commit"
+        git pull --rebase
+        git push
+        
+  build-macos:
+    needs: build-linux  # This makes it wait for build-linux to complete
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.PAT_TOKEN }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build macOS
+      run: |
+        GOOS=darwin GOARCH=amd64 go build -v -o sqlite-server-macos
+
+    - name: Commit and push macOS binary
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git pull  # Get the Linux binary that was just pushed
+        git add sqlite-server-macos
+        git commit -m "Update sqlite-server-macos binary" || echo "No changes to commit"
         git push
