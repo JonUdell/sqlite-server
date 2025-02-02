@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.PAT_TOKEN }}
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -29,9 +31,11 @@ jobs:
         go build -v -o ${{ matrix.binary }}
 
     - name: Commit and push binary
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
-        git config --global user.name 'GitHub Actions'
-        git config --global user.email 'actions@github.com'
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         git add ${{ matrix.binary }}
         git commit -m "Update ${{ matrix.binary }} binary" || echo "No changes to commit"
         git push
