@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"io"
 	"log"
 	"net/http"
@@ -162,6 +163,10 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Set up command line flags
+	port := flag.String("port", "8080", "Port to run the server on")
+	flag.Parse()
+
 	// Set up logging
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	log.Println("Server starting...")
@@ -218,13 +223,8 @@ func main() {
 	})
 
 	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	log.Printf("Server listening on port %s...", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	log.Printf("Server listening on port %s...", *port)
+	if err := http.ListenAndServe(":"+*port, mux); err != nil {
 		log.Fatal(err)
 	}
 }
