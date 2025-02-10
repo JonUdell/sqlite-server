@@ -194,6 +194,21 @@ func main() {
 	// Create router
 	mux := http.NewServeMux()
 
+	corsMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
+
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+
 	// Handle proxy first (more specific)
 	mux.HandleFunc("/proxy/", server.handleProxy)
 
@@ -224,7 +239,10 @@ func main() {
 
 	// Start server
 	log.Printf("Server listening on port %s...", *port)
-	if err := http.ListenAndServe(":"+*port, mux); err != nil {
+	if *port == "" {
+		*port = "8080"
+	}
+	if err := http.ListenAndServe(":" +  *port, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
