@@ -217,15 +217,27 @@ func main() {
 	// Handle root and static files
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Received request for: %s", r.URL.Path)
-
-		// If root path, try to serve index.html
+	
 		if r.URL.Path == "/" {
 			log.Println("Trying to serve index.html")
 			http.ServeFile(w, r, "index.html")
 			return
 		}
+	
+		if strings.HasPrefix(r.URL.Path, "/xmlui-hubspot/") {
+			relativePath := "." + strings.TrimPrefix(r.URL.Path, "/xmlui-hubspot")
+			log.Printf("Serving XMLUI file: %s", relativePath)
+			http.ServeFile(w, r, relativePath)
+			return
+		}
 
-		// Otherwise serve the requested file
+		if strings.HasPrefix(r.URL.Path, "/xmlui-hn/") {
+			relativePath := "." + strings.TrimPrefix(r.URL.Path, "/xmlui-hn")
+			log.Printf("Serving XMLUI file: %s", relativePath)
+			http.ServeFile(w, r, relativePath)
+			return
+		}
+
 		filePath := "." + r.URL.Path
 		log.Printf("Trying to serve: %s", filePath)
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -235,6 +247,7 @@ func main() {
 		}
 		http.ServeFile(w, r, filePath)
 	})
+	
 
 	// Start server
 	log.Printf("Server listening on port %s...", *port)
