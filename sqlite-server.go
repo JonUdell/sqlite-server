@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,67 +102,64 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		result = append(result, entry)
 	}
 
-	// Log the response before sending it
+	/*
 	responseJSON, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		log.Printf("Error marshaling response for logging: %v", err)
 	} else {
 		log.Printf("Response Body: %s", string(responseJSON))
 	}
+    */
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
 }
 
 func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Handling proxy request from %s", r.URL.Path)
-	// Extract the target URL from the path
-	targetURL := r.URL.Path[len("/proxy/"):]
-	if !strings.HasPrefix(targetURL, "http") {
-		targetURL = "https://" + targetURL
-	}
+    // 1. Parse off the part after "/proxy/".
+    //    Suppose user hits: GET /proxy/api.hubapi.com/crm/v3/objects/contacts?properties=...
+    //    Then targetPath = "api.hubapi.com/crm/v3/objects/contacts"
+    targetPath := strings.TrimPrefix(r.URL.Path, "/proxy/")
+    targetQuery := r.URL.RawQuery
 
-	// Create the proxy request
-	proxyReq, err := http.NewRequest(r.Method, targetURL, r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+    // 2. Split off the first segment as the actual host.
+    //    pathParts[0] = "api.hubapi.com"
+    //    pathParts[1] = "crm/v3/objects/contacts"
+    pathParts := strings.SplitN(targetPath, "/", 2)
+    hostPart := pathParts[0]
 
-	// Copy original headers
-	for header, values := range r.Header {
-		for _, value := range values {
-			proxyReq.Header.Add(header, value)
-		}
-	}
+    // 3. The remainder is your path on that host.
+    var subPath string
+    if len(pathParts) > 1 {
+        subPath = "/" + pathParts[1] // => "/crm/v3/objects/contacts"
+    } else {
+        subPath = "/"
+    }
 
-	// Make the request
-	client := &http.Client{}
-	resp, err := client.Do(proxyReq)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
+    // 4. Construct a "bare" target with no path so the default Director won't double up paths.
+    rawTarget := "https://" + hostPart // e.g. "https://api.hubapi.com"
+    targetURL, err := url.Parse(rawTarget)
+    if err != nil {
+        http.Error(w, "Invalid target URL: "+err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	// Set CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "*")
+    // 5. Create the reverse proxy.
+    proxy := httputil.NewSingleHostReverseProxy(targetURL)
 
-	// Copy response headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
+    // 6. Update the inbound request with subPath and query
+    r.URL.Scheme = targetURL.Scheme
+    r.URL.Host   = targetURL.Host
+    r.URL.Path   = subPath
+    r.URL.RawQuery = targetQuery
 
-	// Set response status code
-	w.WriteHeader(resp.StatusCode)
+    // 7. (Optional) Reassign the Host header to match target
+    r.Host = targetURL.Host
 
-	// Copy response body
-	io.Copy(w, resp.Body)
+    // 8. Finally, run the proxy
+    proxy.ServeHTTP(w, r)
 }
+
 
 func main() {
 	// Set up command line flags
