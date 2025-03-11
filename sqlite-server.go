@@ -224,6 +224,7 @@ func main() {
 			return
 		}
 
+		/*
 		if strings.HasPrefix(r.URL.Path, "/xmlui-hubspot/") {
 			relativePath := "." + strings.TrimPrefix(r.URL.Path, "/xmlui-hubspot")
 			log.Printf("Serving XMLUI file: %s", relativePath)
@@ -244,6 +245,7 @@ func main() {
 			http.ServeFile(w, r, relativePath)
 			return
 		}
+		*/
 
 		filePath := "." + r.URL.Path
 		log.Printf("Trying to serve: %s", filePath)
