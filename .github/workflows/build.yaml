@@ -30,5 +30,36 @@ jobs:
         git commit -m "Update sqlite-server-linux binary" || echo "No changes to commit"
         git pull --rebase
         git push
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.PAT_TOKEN }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build macOS ARM64 binary
+      run: |
+        GOOS=darwin GOARCH=arm64 go build -v -o sqlite-server-mac-arm
+
+    - name: Create tar.gz archive
+      run: |
+        tar -czf sqlite-server-mac-arm.tar.gz sqlite-server-mac-arm
+
+    - name: Commit and push macOS binary archive
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git add sqlite-server-mac-arm.tar.gz
+        git commit -m "Update sqlite-server-mac-arm binary (tar.gz)" || echo "No changes to commit"
+        git pull --rebase
+        git push
         
   
