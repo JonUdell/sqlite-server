@@ -17,7 +17,7 @@ jobs:
       with:
         tag_name: ${{ github.event.inputs.tag }}
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
   build-linux:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
         files: sqlite-server-linux.tar.gz
         tag_name: ${{ github.event.inputs.tag }}
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
   build-mac:
     runs-on: macos-latest
@@ -71,4 +71,4 @@ jobs:
         files: sqlite-server-mac-arm.tar.gz
         tag_name: ${{ github.event.inputs.tag }}
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
