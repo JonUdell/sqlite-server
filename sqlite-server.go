@@ -27,43 +27,58 @@ type Server struct {
 	db *sql.DB
 }
 
+func checkSQLiteCompileOptions(db *sql.DB) error {
+    rows, err := db.Query("PRAGMA compile_options;")
+    if err != nil {
+        return fmt.Errorf("failed to query SQLite compile options: %w", err)
+    }
+    defer rows.Close()
+
+    required := []string{"ENABLE_LOAD_EXTENSION", "ALLOW_LOAD_EXTENSION"}
+    found := make(map[string]bool)
+    var options []string
+
+    for rows.Next() {
+        var option string
+        if err := rows.Scan(&option); err != nil {
+            return fmt.Errorf("failed to scan SQLite compile option: %w", err)
+        }
+        options = append(options, option)
+        for _, req := range required {
+            if strings.Contains(option, req) {
+                found[req] = true
+            }
+        }
+    }
+
+    log.Println("🔍 SQLite Compile Options Found:")
+    for _, opt := range options {
+        log.Printf("  - %s", opt)
+    }
+
+    for _, req := range required {
+        if !found[req] {
+            return fmt.Errorf("required SQLite compile option missing: %s", req)
+        }
+    }
+
+    log.Println("✅ Required SQLite compile options ENABLE_LOAD_EXTENSION and ALLOW_LOAD_EXTENSION are present.")
+    return nil
+}
+
 func NewServer(dbPath string) (*Server, error) {
     db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
     if err != nil {
         return nil, err
     }
 
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+    db.SetMaxOpenConns(1)
+    db.SetMaxIdleConns(1)
 
-	func() {
-		requiredOptions := []string{"ENABLE_LOAD_EXTENSION", "ALLOW_LOAD_EXTENSION"}
-		seenOptions := make(map[string]bool)
-
-		rows, err := db.Query("PRAGMA compile_options;")
-		if err != nil {
-			log.Fatalf("Failed to query compile options: %v", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var option string
-			if err := rows.Scan(&option); err != nil {
-				log.Fatalf("Failed to scan compile option: %v", err)
-			}
-			for _, req := range requiredOptions {
-				if strings.Contains(option, req) {
-					seenOptions[req] = true
-				}
-			}
-		}
-
-		for _, req := range requiredOptions {
-			if !seenOptions[req] {
-				log.Fatalf("Missing required SQLite compile option: %s", req)
-			}
-		}
-    }()
+    // Check that required SQLite compile options are present
+    if err := checkSQLiteCompileOptions(db); err != nil {
+        return nil, err
+    }
 
     const extensionPath = "steampipe_sqlite_github.so"
 
@@ -80,7 +95,6 @@ func NewServer(dbPath string) (*Server, error) {
             log.Printf("Extension %s loaded successfully", extensionPath)
 
             // Configure Steampipe in githubmem
-            // You can inject token via env or config, here hardcoded for example:
             config := `{"token":"your-github-token-here"}`
             if _, err := db.Exec(`SELECT githubmem.steampipe_configure_github(?)`, config); err != nil {
                 log.Printf("Warning: failed to configure Steampipe GitHub plugin: %v", err)
@@ -96,7 +110,6 @@ func NewServer(dbPath string) (*Server, error) {
 
     return &Server{db: db}, nil
 }
-
 
 
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
