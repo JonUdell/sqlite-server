@@ -74,9 +74,11 @@ jobs:
 
     - name: Build sqlite-server
       run: |
+        export CGO_ENABLED=1
         export CGO_CFLAGS="-I$HOME/sqlite/include"
-        export CGO_LDFLAGS="-L$HOME/sqlite/lib"
-        GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
+        export CGO_LDFLAGS="-L$HOME/sqlite/lib -lsqlite3"
+        GOOS=linux GOARCH=amd64 go build -tags "sqlite3_load_extension" -v -o sqlite-server-linux
+
 
     - name: Check dynamic libraries linked
       run: |
