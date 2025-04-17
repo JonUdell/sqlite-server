@@ -36,6 +36,35 @@ func NewServer(dbPath string) (*Server, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
+	func() {
+		requiredOptions := []string{"ENABLE_LOAD_EXTENSION", "ALLOW_LOAD_EXTENSION"}
+		seenOptions := make(map[string]bool)
+
+		rows, err := db.Query("PRAGMA compile_options;")
+		if err != nil {
+			log.Fatalf("Failed to query compile options: %v", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var option string
+			if err := rows.Scan(&option); err != nil {
+				log.Fatalf("Failed to scan compile option: %v", err)
+			}
+			for _, req := range requiredOptions {
+				if strings.Contains(option, req) {
+					seenOptions[req] = true
+				}
+			}
+		}
+
+		for _, req := range requiredOptions {
+			if !seenOptions[req] {
+				log.Fatalf("Missing required SQLite compile option: %s", req)
+			}
+		}
+    }()
+
     const extensionPath = "steampipe_sqlite_github.so"
 
     if _, statErr := os.Stat(extensionPath); statErr == nil {
