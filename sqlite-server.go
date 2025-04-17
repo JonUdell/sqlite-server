@@ -79,15 +79,34 @@ func NewServer(dbPath string) (*Server, error) {
 
     // Check that required SQLite compile options are present
     if err := checkSQLiteCompileOptions(db); err != nil {
-        return nil, err
+        // Not failing on missing compile options
+        log.Printf("⚠️ SQLite compile options issue: %v", err)
     }
 
+    // Try dynamic extension loading first, then fall back to static approach
+    if tryDynamicExtensionLoading(db) {
+        log.Println("Dynamic extension loading succeeded")
+    } else {
+        log.Println("Dynamic extension loading failed, trying static approach")
+        // Fall back to static extension initialization
+        if err := StaticExtensionInit(db); err != nil {
+            log.Printf("⚠️ Static extension initialization failed: %v", err)
+        }
+    }
+
+    return &Server{db: db}, nil
+}
+
+// tryDynamicExtensionLoading attempts to load the extension dynamically
+// Returns true if successful, false otherwise
+func tryDynamicExtensionLoading(db *sql.DB) bool {
     const extensionPath = "steampipe_sqlite_github.so"
 
     if _, statErr := os.Stat(extensionPath); statErr == nil {
         // Attach in-memory DB for Steampipe
         if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
-            return nil, fmt.Errorf("failed to attach memory database: %w", err)
+            log.Printf("Failed to attach memory database: %v", err)
+            return false
         }
 
         // Get absolute path to extension for more reliable loading
@@ -133,19 +152,35 @@ func NewServer(dbPath string) (*Server, error) {
         
         if !extensionLoaded {
             log.Printf("ERROR: Could not load extension %s after all attempts: %v", extensionPath, lastError)
-        } else {
-            // Configuration can be done later by querying:
-            // SELECT steampipe_configure_github('{"token":"your-github-token-here"}')
+            return false
         }
+        
+        // Extension loaded successfully
+        return true
+        
     } else if os.IsNotExist(statErr) {
-        log.Printf("Extension %s not found, skipping load", extensionPath)
+        log.Printf("Extension %s not found, skipping dynamic load", extensionPath)
     } else {
         log.Printf("Error checking extension %s: %v", extensionPath, statErr)
     }
-
-    return &Server{db: db}, nil
+    
+    return false
 }
 
+
+// StaticExtensionInit initializes a minimal environment for when extensions can't be loaded
+// This provides a fallback so the server can run without dynamic extension loading
+func StaticExtensionInit(db *sql.DB) error {
+    log.Println("Setting up minimal static environment (no extension functionality)")
+    
+    // Just attach the memory database to prevent errors
+    if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
+        return fmt.Errorf("failed to attach memory database: %w", err)
+    }
+    
+    log.Println("✅ Server will run without GitHub extension functionality")
+    return nil
+}
 
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Handling query request from %s", r.URL.Path)
