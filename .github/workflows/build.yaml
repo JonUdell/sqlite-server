@@ -78,8 +78,10 @@ jobs:
     - name: Build sqlite-server
       run: |
         export CGO_ENABLED=1
-        export CGO_CFLAGS="-I$HOME/sqlite/include"
+        export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
         export CGO_LDFLAGS="-L$HOME/sqlite/lib -lsqlite3"
+        # Set SQLITE_DLOPEN_FLAGS to allow loading extensions
+        export SQLITE_DLOPEN_FLAGS=0x01
         GOOS=linux GOARCH=amd64 go build -tags "sqlite3_load_extension" -v -o sqlite-server-linux
 
 
