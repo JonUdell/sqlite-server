@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -27,12 +28,47 @@ type Server struct {
 }
 
 func NewServer(dbPath string) (*Server, error) {
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, err
-	}
-	return &Server{db: db}, nil
+    db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
+    if err != nil {
+        return nil, err
+    }
+
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+
+    const extensionPath = "steampipe_sqlite_github.so"
+
+    if _, statErr := os.Stat(extensionPath); statErr == nil {
+        // Attach in-memory DB for Steampipe
+        if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
+            return nil, fmt.Errorf("failed to attach memory database: %w", err)
+        }
+
+        // Load Steampipe extension
+        if _, err := db.Exec(`SELECT load_extension(?)`, extensionPath); err != nil {
+            log.Printf("Warning: failed to load extension %s: %v", extensionPath, err)
+        } else {
+            log.Printf("Extension %s loaded successfully", extensionPath)
+
+            // Configure Steampipe in githubmem
+            // You can inject token via env or config, here hardcoded for example:
+            config := `{"token":"your-github-token-here"}`
+            if _, err := db.Exec(`SELECT githubmem.steampipe_configure_github(?)`, config); err != nil {
+                log.Printf("Warning: failed to configure Steampipe GitHub plugin: %v", err)
+            } else {
+                log.Printf("Steampipe GitHub plugin configured successfully")
+            }
+        }
+    } else if os.IsNotExist(statErr) {
+        log.Printf("Extension %s not found, skipping load", extensionPath)
+    } else {
+        log.Printf("Error checking extension %s: %v", extensionPath, statErr)
+    }
+
+    return &Server{db: db}, nil
 }
+
+
 
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Handling query request from %s", r.URL.Path)
