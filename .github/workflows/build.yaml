@@ -48,7 +48,7 @@ jobs:
         cd sqlite-autoconf-3450300
         export CFLAGS="-DSQLITE_ALLOW_LOAD_EXTENSION"
         ./configure --enable-load-extension --prefix=$HOME/sqlite CFLAGS="$CFLAGS"
-        make clean
+        grep -i allow_load_extension config.log || true
         make CFLAGS="$CFLAGS"
         make install
 
