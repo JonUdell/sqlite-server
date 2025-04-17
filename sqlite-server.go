@@ -114,11 +114,10 @@ func NewServer(dbPath string) (*Server, error) {
         
         for _, method := range loadExtensionMethods {
             log.Printf("Trying to load extension using %s", method.desc)
-            var result sql.Result
             if method.args != nil {
-                result, err = db.Exec(method.query, method.args...)
+                _, err = db.Exec(method.query, method.args...)
             } else {
-                result, err = db.Exec(method.query)
+                _, err = db.Exec(method.query)
             }
             
             if err != nil {
