@@ -47,6 +47,7 @@ jobs:
         tar xzf sqlite-autoconf-3450300.tar.gz
         cd sqlite-autoconf-3450300
         CFLAGS="-DSQLITE_ALLOW_LOAD_EXTENSION" ./configure --enable-load-extension --prefix=$HOME/sqlite
+        make clean
         make
         make install
 
