@@ -48,22 +48,21 @@ jobs:
         cd sqlite-autoconf-3450300
         export CFLAGS="-DSQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_ALLOW_LOAD_EXTENSION"
         ./configure --prefix=$HOME/sqlite
+
+        # 🔥 Force patch Makefile immediately
+        sed -i 's|^CFLAGS = |CFLAGS = -DSQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_ALLOW_LOAD_EXTENSION |' Makefile
+
         echo "🔍 Checking config.log for compile flags:"
         grep -i allow_load_extension config.log || true
         grep -i enable_load_extension config.log || true
 
-        echo "🔍 Checking Makefile for compile flags:"
+        echo "🔍 Checking Makefile for compile flags after patch:"
         grep -i allow_load_extension Makefile || true
         grep -i enable_load_extension Makefile || true
 
-        # Patch Makefile if necessary
-        if ! grep -q "SQLITE_ALLOW_LOAD_EXTENSION" Makefile; then
-          echo "⚡ Patching Makefile to add -DSQLITE_ALLOW_LOAD_EXTENSION..."
-          sed -i 's|^CFLAGS = |CFLAGS = -DSQLITE_ALLOW_LOAD_EXTENSION -DSQLITE_ENABLE_LOAD_EXTENSION |' Makefile
-        fi
-
         make CFLAGS="$CFLAGS"
         make install
+
 
     - name: Patch go-sqlite3
       run: |
