@@ -90,12 +90,51 @@ func NewServer(dbPath string) (*Server, error) {
             return nil, fmt.Errorf("failed to attach memory database: %w", err)
         }
 
-        // Load Steampipe extension
-        if _, err := db.Exec(`SELECT load_extension(?)`, extensionPath); err != nil {
-            log.Printf("Warning: failed to load extension %s: %v", extensionPath, err)
-        } else {
-            log.Printf("Extension %s loaded successfully", extensionPath)
+        // Get absolute path to extension for more reliable loading
+        absExtensionPath, err := filepath.Abs(extensionPath)
+        if err != nil {
+            log.Printf("Warning: failed to get absolute path for extension %s: %v", extensionPath, err)
+            absExtensionPath = extensionPath
+        }
+        
+        // Try different approaches for loading the extension
+        loadExtensionMethods := []struct {
+            desc string
+            query string
+            args []interface{}
+        }{
+            {"standard way", `SELECT load_extension(?)`, []interface{}{absExtensionPath}},
+            {"without extension", `SELECT load_extension(?)`, []interface{}{strings.TrimSuffix(absExtensionPath, ".so")}},
+            {"direct query", fmt.Sprintf(`SELECT load_extension('%s')`, absExtensionPath), nil},
+            {"with relative path", `SELECT load_extension(?)`, []interface{}{extensionPath}},
+        }
+        
+        extensionLoaded := false
+        var lastError error
+        
+        for _, method := range loadExtensionMethods {
+            log.Printf("Trying to load extension using %s", method.desc)
+            var result sql.Result
+            if method.args != nil {
+                result, err = db.Exec(method.query, method.args...)
+            } else {
+                result, err = db.Exec(method.query)
+            }
             
+            if err != nil {
+                log.Printf("Warning: failed to load extension %s (%s): %v", extensionPath, method.desc, err)
+                lastError = err
+                continue
+            }
+            
+            log.Printf("Extension %s loaded successfully using %s", extensionPath, method.desc)
+            extensionLoaded = true
+            break
+        }
+        
+        if !extensionLoaded {
+            log.Printf("ERROR: Could not load extension %s after all attempts: %v", extensionPath, lastError)
+        } else {
             // Configuration can be done later by querying:
             // SELECT steampipe_configure_github('{"token":"your-github-token-here"}')
         }
