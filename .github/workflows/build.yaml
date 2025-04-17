@@ -58,11 +58,6 @@ jobs:
         export CGO_LDFLAGS="-L$HOME/sqlite/lib"
         GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
 
-    - name: Download Steampipe GitHub extension
-      run: |
-        wget https://downloads.steampipe.io/plugins/turbot/steampipe-sqlite-github/latest/steampipe_sqlite_github_linux_amd64.so
-        mv steampipe_sqlite_github_linux_amd64.so steampipe_sqlite_github.so
-
     - name: Create tar.gz archive
       run: |
         tar -czf sqlite-server-linux.tar.gz sqlite-server-linux steampipe_sqlite_github.so
