@@ -46,9 +46,10 @@ jobs:
         wget https://www.sqlite.org/2024/sqlite-autoconf-3450300.tar.gz
         tar xzf sqlite-autoconf-3450300.tar.gz
         cd sqlite-autoconf-3450300
-        export CFLAGS="-DSQLITE_ALLOW_LOAD_EXTENSION"
-        ./configure --enable-load-extension --prefix=$HOME/sqlite CFLAGS="$CFLAGS"
+        export CFLAGS="-DSQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_ALLOW_LOAD_EXTENSION"
+        ./configure --prefix=$HOME/sqlite
         grep -i allow_load_extension config.log || true
+        grep -i enable_load_extension config.log || true
         make CFLAGS="$CFLAGS"
         make install
 
