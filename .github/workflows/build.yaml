@@ -37,7 +37,7 @@ jobs:
 
     - name: Build SQLite
       run: |
-        wget https://www.sqlite.org/2025/sqlite-autoconf-3450000.tar.gz
+        wget https://www.sqlite.org/2024/sqlite-autoconf-3450300.tar.gz
         tar xzf sqlite-autoconf-3450000.tar.gz
         cd sqlite-autoconf-3450000
         ./configure --enable-load-extension --prefix=$HOME/sqlite
