@@ -39,7 +39,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/sqlite
-        key: ${{ runner.os }}-sqlite-3450300
+        key: ${{ runner.os }}-sqlite-3450300-v2
 
     - name: Build SQLite
       run: |
