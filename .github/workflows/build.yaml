@@ -58,6 +58,11 @@ jobs:
         export CGO_LDFLAGS="-L$HOME/sqlite/lib"
         GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
 
+    - name: Check dynamic libraries linked
+      run: |
+        echo "🔍 Checking linked libraries for sqlite-server-linux"
+        ldd sqlite-server-linux || true
+
     - name: Create tar.gz archive
       run: |
         tar -czf sqlite-server-linux.tar.gz sqlite-server-linux steampipe_sqlite_github.so
