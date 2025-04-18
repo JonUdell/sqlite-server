@@ -260,8 +260,13 @@ jobs:
         echo "Files in directory:"
         ls -la
         
+        # Make sure the extension_test.go file exists and has content
+        echo "Content of extension_test.go:"
+        cat extension_test.go
+        
         # Ensure we build with correct output name
-        go build -tags "sqlite3_load_extension" -v -o extension_test extension_test.go
+        echo "Building extension_test..."
+        go build -tags "sqlite3_load_extension" -v -o extension_test ./extension_test.go
         
         # Make sure file exists before running
         if [ -f "./extension_test" ]; then
@@ -279,7 +284,8 @@ jobs:
         export CGO_CFLAGS="-I$HOME/sqlite/include"
         export CGO_LDFLAGS="-L$HOME/sqlite/lib -lsqlite3"
         
-        go build -tags "sqlite3_load_extension" -v -o extension_test_custom extension_test.go
+        echo "Building custom extension test..."
+        go build -tags "sqlite3_load_extension" -v -o extension_test_custom ./extension_test.go
         
         if [ -f "./extension_test_custom" ]; then
           echo "Running custom extension test..."
@@ -441,7 +447,13 @@ jobs:
         # Build and run both non-static and static versions
         echo "🔧 Building and testing with system SQLite..."
         export CGO_ENABLED=1
-        go build -tags "sqlite3_load_extension" -v -o sqlite_server_diagnostic_system sqlite_server_diagnostic.go
+        
+        # Make sure the sqlite_server_diagnostic.go file exists and has content
+        echo "Content of sqlite_server_diagnostic.go:"
+        cat sqlite_server_diagnostic.go
+        
+        echo "Building system SQLite diagnostic binary..."
+        go build -tags "sqlite3_load_extension" -v -o sqlite_server_diagnostic_system ./sqlite_server_diagnostic.go
         
         if [ -f "./sqlite_server_diagnostic_system" ]; then
           echo "Running system SQLite diagnostic..."
@@ -455,7 +467,9 @@ jobs:
         export CGO_ENABLED=1
         export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
         export CGO_LDFLAGS="-static $HOME/sqlite/lib/libsqlite3.a -ldl -lm"
-        go build -tags "sqlite3_load_extension" -ldflags="-linkmode external" -v -o sqlite_server_diagnostic_static sqlite_server_diagnostic.go
+        
+        echo "Building static SQLite diagnostic binary..."
+        go build -tags "sqlite3_load_extension" -ldflags="-linkmode external" -v -o sqlite_server_diagnostic_static ./sqlite_server_diagnostic.go
         
         if [ -f "./sqlite_server_diagnostic_static" ]; then
           echo "Running static SQLite diagnostic..."
@@ -485,7 +499,7 @@ jobs:
         export CGO_CFLAGS="-I\$HOME/sqlite/include"
         export CGO_LDFLAGS="\$HOME/sqlite/lib/libsqlite3.a -lm -ldl"
         
-        go build -tags "sqlite3_load_extension" -v -o sqlite-server-build-local
+        go build -tags "sqlite3_load_extension" -v -o sqlite-server-build-local ./sqlite-server.go
         EOF
         
         chmod +x build-linux-test.sh
