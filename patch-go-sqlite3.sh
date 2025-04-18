@@ -213,6 +213,51 @@ func (c *SQLiteConn) EnableLoadExtension(enable bool) error {
 
 	return nil
 }
+
+// loadExtensions loads multiple extensions at once
+func (c *SQLiteConn) loadExtensions(extensions []string) error {
+	if len(extensions) == 0 {
+		return nil
+	}
+	
+	fmt.Printf("🔍 loadExtensions called with %d extensions\n", len(extensions))
+	
+	// Enable extension loading
+	rv := C.sqlite3_enable_load_extension(c.db, 1)
+	if rv != C.SQLITE_OK {
+		return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
+	}
+
+	// Load each extension
+	for _, extension := range extensions {
+		cPath := C.CString(extension)
+		var errMsg *C.char
+		fmt.Printf("🔍 Loading extension: %s\n", extension)
+		rv := C.sqlite3_load_extension(c.db, cPath, nil, &errMsg)
+		C.free(unsafe.Pointer(cPath))
+		
+		if rv != C.SQLITE_OK {
+			// Disable extension loading before returning
+			C.sqlite3_enable_load_extension(c.db, 0)
+			
+			if errMsg != nil {
+				errStr := C.GoString(errMsg)
+				C.sqlite3_free(unsafe.Pointer(errMsg))
+				return errors.New(errStr)
+			}
+			return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
+		}
+	}
+
+	// Disable extension loading
+	rv = C.sqlite3_enable_load_extension(c.db, 0)
+	if rv != C.SQLITE_OK {
+		return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
+	}
+
+	fmt.Println("✅ All extensions loaded successfully")
+	return nil
+}
 EOF
 
 # 5. Add code to auto-enable extension loading
