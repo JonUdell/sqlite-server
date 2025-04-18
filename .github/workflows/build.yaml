@@ -71,28 +71,16 @@ jobs:
         cd go-sqlite3
         # Apply minimal patch: enable extension loading
         sed -i 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1|' sqlite3.go
-        
+
         # Enable load_extension at runtime
         sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/a \\n\tC.sqlite3_enable_load_extension(db, 1)' sqlite3.go
 
-    # We'll focus on dynamic loading with fall back to non-extension mode
-    - name: Copy extension for dynamic loading attempt
-      run: |
-        # Ensure extension is available for dynamic loading attempt
-        if [ -f "steampipe_sqlite_github.so" ]; then
-          cp steampipe_sqlite_github.so . || echo "Extension already in place"
-        elif [ -f "extension.tar.gz" ]; then
-          tar -xzf extension.tar.gz || echo "Extraction failed, will try without extension"
-        else
-          echo "No extension available, will run in compatibility mode"
-        fi
-        
     - name: Build sqlite-server
       run: |
         export CGO_ENABLED=1
         export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
         export CGO_LDFLAGS="-L$HOME/sqlite/lib -lsqlite3 -ldl -lm"
-        
+
         # Build with extension loading support and fallback mode
         GOOS=linux GOARCH=amd64 go build -tags "sqlite3_load_extension" -v -o sqlite-server-linux
 
@@ -104,7 +92,7 @@ jobs:
 
     - name: Create tar.gz archive
       run: |
-        tar -czf sqlite-server-linux.tar.gz sqlite-server-linux steampipe_sqlite_github.so
+        tar -czf sqlite-server-linux.tar.gz sqlite-server-linux
 
     - name: Upload Linux release asset
       uses: softprops/action-gh-release@v2
