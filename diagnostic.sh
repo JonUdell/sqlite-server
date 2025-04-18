@@ -218,6 +218,11 @@ GOFILE
 
 # Set up Go module and build
 echo -e "\n📦 Setting up Go module and building test program with system SQLite..."
+# Create a separate directory for our tests to avoid go.mod conflicts
+mkdir -p sqlite_test
+cp test_program.go sqlite_test/
+cp test_extension.so sqlite_test/
+cd sqlite_test
 go mod init sqlitetest
 go get github.com/mattn/go-sqlite3
 
@@ -242,5 +247,8 @@ export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQL
 export CGO_LDFLAGS="-static $HOME/sqlite/lib/libsqlite3.a -ldl -lm"
 go build -tags "sqlite3_load_extension" -ldflags="-linkmode external" -v -o test_static test_program.go
 ./test_static
+
+# Return to the original directory
+cd ..
 
 echo -e "\n✅ Diagnostic complete\!"
