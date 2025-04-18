@@ -1,4 +1,4 @@
-#\!/bin/bash
+#!/bin/bash
 # SQLite Extension Loading Diagnostic Script
 set -e
 
@@ -53,7 +53,7 @@ SQLITE_EXTENSION_INIT1
 
 /* Function needs to be 'void' not 'int' to match expected callback type */
 static void hello_world(sqlite3_context *context, int argc, sqlite3_value **argv) {
-  sqlite3_result_text(context, "Hello from extension\!", -1, SQLITE_TRANSIENT);
+  sqlite3_result_text(context, "Hello from extension!", -1, SQLITE_TRANSIENT);
 }
 
 int sqlite3_testextension_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
@@ -95,14 +95,14 @@ func main() {
 	// Open database with extension loading enabled
 	fmt.Println("\n🔍 Opening database with _allow_load_extension=1...")
 	db, err := sql.Open("sqlite3", "test.db?_allow_load_extension=1")
-	if err \!= nil {
+	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 	defer db.Close()
 	
 	// Check SQLite version
 	var version string
-	if err := db.QueryRow("SELECT sqlite_version()").Scan(&version); err \!= nil {
+	if err := db.QueryRow("SELECT sqlite_version()").Scan(&version); err != nil {
 		fmt.Printf("Failed to get SQLite version: %v\n", err)
 	} else {
 		fmt.Printf("SQLite version: %s\n", version)
@@ -110,7 +110,7 @@ func main() {
 	
 	// Print compile options
 	rows, err := db.Query("PRAGMA compile_options;")
-	if err \!= nil {
+	if err != nil {
 		fmt.Printf("Failed to query compile options: %v\n", err)
 	} else {
 		fmt.Println("SQLite compile options:")
@@ -125,7 +125,7 @@ func main() {
 	// Check if we can see allow_load_extension PRAGMA
 	fmt.Println("\n🔍 Checking allow_load_extension PRAGMA before enabling...")
 	var allowExt int
-	if err := db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt); err \!= nil {
+	if err := db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt); err != nil {
 		fmt.Printf("Cannot query allow_load_extension PRAGMA: %v\n", err)
 	} else {
 		fmt.Printf("allow_load_extension PRAGMA value: %d\n", allowExt)
@@ -134,7 +134,7 @@ func main() {
 	// Try enabling extension loading
 	fmt.Println("\n🔍 Trying to enable extension loading...")
 	_, err = db.Exec("SELECT sqlite3_enable_load_extension(1)")
-	if err \!= nil {
+	if err != nil {
 		fmt.Printf("Failed to enable extensions: %v\n", err)
 	} else {
 		fmt.Println("Successfully enabled extensions")
@@ -142,7 +142,7 @@ func main() {
 	
 	// Check if extension loading is enabled now
 	fmt.Println("\n🔍 Checking allow_load_extension PRAGMA after enabling...")
-	if err := db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt); err \!= nil {
+	if err := db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt); err != nil {
 		fmt.Printf("Cannot query allow_load_extension PRAGMA: %v\n", err)
 	} else {
 		fmt.Printf("allow_load_extension PRAGMA value: %d\n", allowExt)
@@ -154,7 +154,7 @@ func main() {
 	fmt.Printf("\nLoading extension from: %s\n", absPath)
 	
 	// Verify extension file permissions and existence
-	if fileInfo, err := os.Stat(extensionPath); err \!= nil {
+	if fileInfo, err := os.Stat(extensionPath); err != nil {
 		fmt.Printf("Extension file error: %v\n", err)
 	} else {
 		fmt.Printf("Extension file permissions: %v\n", fileInfo.Mode())
@@ -167,7 +167,7 @@ func main() {
 	// Method 1: Default approach
 	fmt.Println("\nMethod 1: Default approach with placeholder")
 	_, err = db.Exec("SELECT load_extension(?)", absPath)
-	if err \!= nil {
+	if err != nil {
 		fmt.Printf("FAILED: %v\n", err)
 		
 		// Try with direct string
@@ -193,7 +193,7 @@ func main() {
 		fmt.Println("\nMethod 5: Reopening database with fresh connection")
 		db.Close()
 		db, err = sql.Open("sqlite3", "test.db?_allow_load_extension=1")
-		if err \!= nil {
+		if err != nil {
 			fmt.Printf("Failed to reopen database: %v\n", err)
 		} else {
 			// Enable again
@@ -202,12 +202,12 @@ func main() {
 			fmt.Printf("  Result: %v\n", err)
 		}
 	} else {
-		fmt.Println("Successfully loaded extension\!")
+		fmt.Println("Successfully loaded extension!")
 		
 		// Test extension function
 		var hello string
 		err := db.QueryRow("SELECT hello_ext()").Scan(&hello)
-		if err \!= nil {
+		if err != nil {
 			fmt.Printf("Failed to call extension function: %v\n", err)
 		} else {
 			fmt.Printf("Extension function result: %s\n", hello)
@@ -251,4 +251,4 @@ go build -tags "sqlite3_load_extension" -ldflags="-linkmode external" -v -o test
 # Return to the original directory
 cd ..
 
-echo -e "\n✅ Diagnostic complete\!"
+echo -e "\n✅ Diagnostic complete!"
