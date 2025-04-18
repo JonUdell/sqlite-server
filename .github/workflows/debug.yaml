@@ -67,11 +67,12 @@ jobs:
         echo "Creating a simple test extension..."
         cat > test_extension.c << 'EOF'
         #include <sqlite3ext.h>
+        #include <stddef.h>  /* For NULL */
         SQLITE_EXTENSION_INIT1
 
-        static int hello_world(sqlite3_context *context, int argc, sqlite3_value **argv) {
+        /* Function needs to be 'void' not 'int' to match expected callback type */
+        static void hello_world(sqlite3_context *context, int argc, sqlite3_value **argv) {
           sqlite3_result_text(context, "Hello from extension!", -1, SQLITE_TRANSIENT);
-          return SQLITE_OK;
         }
 
         int sqlite3_testextension_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi) {
