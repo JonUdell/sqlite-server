@@ -22,9 +22,9 @@ echo "SELECT 1 FROM pragma_compile_options WHERE compile_options LIKE '%ALLOW_LO
 
 # Build custom SQLite
 echo -e "\n📦 Building custom SQLite with extension loading..."
-wget https://www.sqlite.org/2023/sqlite-autoconf-3420000.tar.gz
-tar xzf sqlite-autoconf-3420000.tar.gz
-cd sqlite-autoconf-3420000
+wget https://www.sqlite.org/2024/sqlite-autoconf-3450300.tar.gz
+tar xzf sqlite-autoconf-3450300.tar.gz
+cd sqlite-autoconf-3450300
 
 export CFLAGS="-DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
 ./configure --prefix=$HOME/sqlite
@@ -41,6 +41,10 @@ make install
 
 echo "🔍 Checking custom SQLite compile options:"
 echo "PRAGMA compile_options;" | $HOME/sqlite/bin/sqlite3 :memory:
+
+# Check for extension loading function
+echo -e "\n🔍 Checking for sqlite3_enable_load_extension in libsqlite3.a:"
+nm -g $HOME/sqlite/lib/libsqlite3.a | grep sqlite3_enable_load_extension || echo "Symbol not found"
 
 cd ..
 
@@ -64,6 +68,11 @@ int sqlite3_testextension_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_r
 EXTC
 
 gcc -fPIC -shared -o test_extension.so test_extension.c -I$HOME/sqlite/include
+
+# Patch go-sqlite3 using our script
+echo -e "\n🔧 Patching go-sqlite3 using patch-go-sqlite3.sh..."
+chmod +x ./patch-go-sqlite3.sh
+./patch-go-sqlite3.sh
 
 # Create Go test program
 echo -e "\n📦 Creating Go test program..."
@@ -122,32 +131,6 @@ func main() {
 		rows.Close()
 	}
 	
-	// Check if we can see allow_load_extension PRAGMA
-	fmt.Println("\n🔍 Checking allow_load_extension PRAGMA before enabling...")
-	var allowExt int
-	if err := db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt); err != nil {
-		fmt.Printf("Cannot query allow_load_extension PRAGMA: %v\n", err)
-	} else {
-		fmt.Printf("allow_load_extension PRAGMA value: %d\n", allowExt)
-	}
-	
-	// Try enabling extension loading
-	fmt.Println("\n🔍 Trying to enable extension loading...")
-	_, err = db.Exec("SELECT sqlite3_enable_load_extension(1)")
-	if err != nil {
-		fmt.Printf("Failed to enable extensions: %v\n", err)
-	} else {
-		fmt.Println("Successfully enabled extensions")
-	}
-	
-	// Check if extension loading is enabled now
-	fmt.Println("\n🔍 Checking allow_load_extension PRAGMA after enabling...")
-	if err := db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt); err != nil {
-		fmt.Printf("Cannot query allow_load_extension PRAGMA: %v\n", err)
-	} else {
-		fmt.Printf("allow_load_extension PRAGMA value: %d\n", allowExt)
-	}
-	
 	// Try loading the extension
 	extensionPath := "./test_extension.so"
 	absPath, _ := filepath.Abs(extensionPath)
@@ -161,46 +144,11 @@ func main() {
 		fmt.Printf("Extension file size: %d bytes\n", fileInfo.Size())
 	}
 	
-	// Try different approaches to load the extension
-	fmt.Println("\n🔍 Attempting different methods to load extension...")
-	
-	// Method 1: Default approach
-	fmt.Println("\nMethod 1: Default approach with placeholder")
+	// Try loading the extension
+	fmt.Println("\n🔍 Attempting to load extension...")
 	_, err = db.Exec("SELECT load_extension(?)", absPath)
 	if err != nil {
 		fmt.Printf("FAILED: %v\n", err)
-		
-		// Try with direct string
-		fmt.Println("\nMethod 2: Direct command string")
-		loadCmd := fmt.Sprintf("SELECT load_extension('%s')", absPath)
-		fmt.Printf("Executing: %s\n", loadCmd)
-		_, err := db.Exec(loadCmd)
-		fmt.Printf("  Result: %v\n", err)
-		
-		// Try with NULL entry point
-		fmt.Println("\nMethod 3: With explicit NULL")
-		loadCmd = fmt.Sprintf("SELECT load_extension('%s', NULL)", absPath)
-		fmt.Printf("Executing: %s\n", loadCmd)
-		_, err = db.Exec(loadCmd)
-		fmt.Printf("  Result: %v\n", err)
-		
-		// Try without extension
-		fmt.Println("\nMethod 4: Relative path without extension")
-		_, err = db.Exec("SELECT load_extension('./test_extension')")
-		fmt.Printf("  Result: %v\n", err)
-		
-		// Try reopening the database
-		fmt.Println("\nMethod 5: Reopening database with fresh connection")
-		db.Close()
-		db, err = sql.Open("sqlite3", "test.db?_allow_load_extension=1")
-		if err != nil {
-			fmt.Printf("Failed to reopen database: %v\n", err)
-		} else {
-			// Enable again
-			db.Exec("SELECT sqlite3_enable_load_extension(1)")
-			_, err = db.Exec("SELECT load_extension(?)", absPath)
-			fmt.Printf("  Result: %v\n", err)
-		}
 	} else {
 		fmt.Println("Successfully loaded extension!")
 		
@@ -216,30 +164,6 @@ func main() {
 }
 GOFILE
 
-# Set up Go module and build
-echo -e "\n📦 Setting up Go module and building test program with system SQLite..."
-# Create a separate directory for our tests to avoid go.mod conflicts
-mkdir -p sqlite_test
-cp test_program.go sqlite_test/
-cp test_extension.so sqlite_test/
-cd sqlite_test
-go mod init sqlitetest
-go get github.com/mattn/go-sqlite3
-
-# Test with system SQLite
-echo -e "\n🧪 Testing with system SQLite..."
-export CGO_ENABLED=1
-go build -tags "sqlite3_load_extension" -v -o test_system test_program.go
-./test_system
-
-# Test with custom SQLite
-echo -e "\n🧪 Testing with custom-built SQLite..."
-export CGO_ENABLED=1
-export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
-export CGO_LDFLAGS="-L$HOME/sqlite/lib -lsqlite3"
-go build -tags "sqlite3_load_extension" -v -o test_custom test_program.go
-LD_LIBRARY_PATH=$HOME/sqlite/lib ./test_custom
-
 # Test with static linking (like the Linux build in GitHub Actions)
 echo -e "\n🧪 Testing with static linking..."
 export CGO_ENABLED=1
@@ -247,8 +171,5 @@ export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQL
 export CGO_LDFLAGS="-static $HOME/sqlite/lib/libsqlite3.a -ldl -lm"
 go build -tags "sqlite3_load_extension" -ldflags="-linkmode external" -v -o test_static test_program.go
 ./test_static
-
-# Return to the original directory
-cd ..
 
 echo -e "\n✅ Diagnostic complete!"
