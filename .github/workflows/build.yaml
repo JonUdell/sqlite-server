@@ -49,10 +49,26 @@ jobs:
     - name: Patch and prepare go-sqlite3
       run: |
         git clone https://github.com/mattn/go-sqlite3.git $HOME/go-sqlite3
+
+        # Check that the target pattern exists
+        if ! grep -q 'if db == nil {' $HOME/go-sqlite3/sqlite3.go; then
+          echo "Error: Could not find 'if db == nil {' in sqlite3.go. Upstream may have changed." >&2
+          exit 1
+        fi
+
+        # Insert after the "if db == nil {" block
         sed -i '/if db == nil {/a C.sqlite3_enable_load_extension(db, 1);' $HOME/go-sqlite3/sqlite3.go
+
+        # Confirm patch success
+        if ! grep -q 'C.sqlite3_enable_load_extension(db, 1);' $HOME/go-sqlite3/sqlite3.go; then
+          echo "Error: Patch failed. Extension enabling code not inserted." >&2
+          exit 1
+        fi
+
+        # Point go.mod to patched driver
         go mod edit -replace github.com/mattn/go-sqlite3=$HOME/go-sqlite3
         go mod tidy
-
+    
     - name: Build Linux binary
       run: |
         export CGO_ENABLED=1
