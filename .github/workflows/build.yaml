@@ -66,14 +66,14 @@ jobs:
 
     - name: Patch go-sqlite3
       run: |
-        go mod edit -replace github.com/mattn/go-sqlite3=./go-sqlite3
+        go clean -modcache
         git clone https://github.com/mattn/go-sqlite3.git
+        go mod edit -replace github.com/mattn/go-sqlite3=./go-sqlite3
         cd go-sqlite3
         # Apply minimal patch: enable extension loading
         sed -i 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1|' sqlite3.go
-
-        # Enable load_extension at runtime
         sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/a \\n\tC.sqlite3_enable_load_extension(db, 1)' sqlite3.go
+
 
     - name: Force clean Go build
       run: |
