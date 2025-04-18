@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to patch go-sqlite3 for SQLite extension loading
+# Enhanced script to patch go-sqlite3 for SQLite extension loading
 set -e
 
 echo "🔧 Patching go-sqlite3 for SQLite extension loading..."
@@ -14,37 +14,26 @@ go clean -modcache
 go mod edit -replace github.com/mattn/go-sqlite3=./go-sqlite3
 cd go-sqlite3
 
-# 1. Apply robust extension loading patch
-# First: Add the extension loading flags to CGO
-echo "🔧 Adding SQLite extension loading flags to CGO..."
-if grep -q "#cgo CFLAGS:" sqlite3.go; then
-  # For macOS, use different sed syntax
-  if [ "$(uname)" = "Darwin" ]; then
-    sed -i '' 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1|' sqlite3.go
-  else
-    sed -i 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1|' sqlite3.go
-  fi
-else
-  echo "⚠️ Could not find '#cgo CFLAGS:' in sqlite3.go"
-fi
+echo "🔍 Current directory structure:"
+ls -la
 
-# 2. Declare the C function in the Go code
-# Add the C function declaration to the top of the file if not already there
-echo "🔧 Declaring SQLite extension loading C functions..."
-if ! grep -q "sqlite3_enable_load_extension" sqlite3.go; then
-  # For macOS, use different sed syntax
-  if [ "$(uname)" = "Darwin" ]; then
-    sed -i '' '/^\/\/ #include <sqlite3ext.h>/a\'$'\n''int sqlite3_enable_load_extension(sqlite3 *db, int onoff);' sqlite3.go
-  else
-    sed -i '/^\/\/ #include <sqlite3ext.h>/a int sqlite3_enable_load_extension(sqlite3 *db, int onoff);' sqlite3.go
+# 1. Add extension flags to ALL cgo directives in ALL files
+echo "🔧 Adding SQLite extension loading flags to ALL CGO directives..."
+for file in *.go; do
+  if grep -q "#cgo" "$file"; then
+    echo "  - Adding flags to $file"
+    if [ "$(uname)" = "Darwin" ]; then
+      sed -i '' 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1|g' "$file"
+    else
+      sed -i 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1|g' "$file"
+    fi
   fi
-fi
+done
 
-# 3. Update build tags to ensure extension loading is enabled
-echo "🔧 Adding build tags for extension loading..."
-if [ -f "sqlite3_load_extension.go" ]; then
-  cat > _extension_version.go << 'TAGFILE'
-// Copyright (C) 2019 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
+# 2. Create a special file with JUST the extension loading flags
+echo "🔧 Creating dedicated extension flags file..."
+cat > _load_extension_flags.go << 'EOF'
+// Copyright (C) 2014 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
@@ -56,51 +45,42 @@ package sqlite3
 */
 import "C"
 
-// This file ensures that the extension loading CFLAGS are included
-// in all builds, regardless of build tags.
-TAGFILE
-fi
-
-# 4. Enable extension loading at connection initialization
-echo "🔧 Adding extension loading at connection initialization..."
-# Create patch for enabling extension loading when opening a connection
-if ! grep -q "Successfully enabled extension loading at connection time" sqlite3.go; then
-  cat > extension_patch.go << 'EXTEOF'
-        // Enable extension loading immediately
-        if rv := C.sqlite3_enable_load_extension(db, 1); rv != C.SQLITE_OK {
-            fmt.Printf("Warning: Failed to enable extension loading: %d\n", rv)
-        } else {
-            fmt.Println("✅ Successfully enabled extension loading at connection time")
-        }
-EXTEOF
-
-  # Insert the patch right after the database is opened
-  # Find a good spot to insert the code, just after the database is created successfully
-  if [ "$(uname)" = "Darwin" ]; then
-    # For macOS, save the line number then use it with ed
-    LINE_NUM=$(grep -n "return nil, errors.New(\"sqlite succeeded without returning a database\")" sqlite3.go | cut -d':' -f1)
-    if [ -n "$LINE_NUM" ]; then
-      ed -s sqlite3.go << EOF
-${LINE_NUM}a
-$(cat extension_patch.go)
-.
-w
-q
+// This file ensures extension loading CFLAGS are always included
 EOF
-    fi
-  else
-    sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/r extension_patch.go' sqlite3.go
-  fi
-  rm -f extension_patch.go
-fi
 
-# 5. Make sure LoadExtension method is properly enabled
-echo "🔧 Ensuring LoadExtension method is enabled..."
+# 3. Create a special file with the C function declaration
+echo "🔧 Creating dedicated extension function declarations file..."
+cat > _load_extension_funcs.go << 'EOF'
+// Copyright (C) 2014 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
 
-# Instead of just commenting out the omit file, create a proper Go file
-if [ -f "sqlite3_load_extension_omit.go" ]; then
-  cat > sqlite3_load_extension_omit.go << 'OMITFILE'
-// Copyright (C) 2019 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
+package sqlite3
+
+/*
+#ifndef USE_LIBSQLITE3
+#include "sqlite3-binding.h"
+#else
+#include <sqlite3.h>
+#endif
+#include <stdlib.h>
+
+// Explicitly declare extension loading functions
+int sqlite3_enable_load_extension(sqlite3 *db, int onoff);
+int sqlite3_load_extension(sqlite3 *db, const char *zFile, const char *zProc, char **pzErrMsg);
+*/
+import "C"
+
+// This file ensures extension loading functions are properly declared
+EOF
+
+# 4. Properly implement the LoadExtension method
+echo "🔧 Ensuring LoadExtension is properly implemented..."
+
+# 4.1 Fix the omit file to be properly empty with package declaration
+cat > sqlite3_load_extension_omit.go << 'EOF'
+// Copyright (C) 2014 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
@@ -110,18 +90,17 @@ if [ -f "sqlite3_load_extension_omit.go" ]; then
 
 package sqlite3
 
-// This file is intentionally empty to prevent build issues
-// LoadExtension is enabled in this build through sqlite3_load_extension.go
-OMITFILE
+// This file is intentionally empty - extension loading is enabled
+EOF
+
+# 4.2 Ensure we have a proper implementation of the LoadExtension method
+if [ -f "sqlite3_load_extension.go" ]; then
+  echo "  - LoadExtension method already exists, backing up and replacing with enhanced version"
+  cp sqlite3_load_extension.go sqlite3_load_extension.go.bak
 fi
 
-if [ -f "sqlite3_load_extension.go" ]; then
-  echo "✅ LoadExtension method already exists in sqlite3_load_extension.go"
-else
-  # If for some reason the file is missing, create it
-  echo "🔧 Creating LoadExtension method file..."
-  cat > sqlite3_load_extension.go << 'EXTFILE'
-// Copyright (C) 2019 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
+cat > sqlite3_load_extension.go << 'EOF'
+// Copyright (C) 2014 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
@@ -138,75 +117,186 @@ package sqlite3
 #include <sqlite3.h>
 #endif
 #include <stdlib.h>
+
+// Explicitly declare extension loading functions
+int sqlite3_enable_load_extension(sqlite3 *db, int onoff);
+int sqlite3_load_extension(sqlite3 *db, const char *zFile, const char *zProc, char **pzErrMsg);
 */
 import "C"
 import (
 	"errors"
+	"fmt"
 	"unsafe"
 )
 
-func (c *SQLiteConn) loadExtensions(extensions []string) error {
+// LoadExtension loads a SQLite extension into the connection
+func (c *SQLiteConn) LoadExtension(path string, entryPoint string) error {
+	fmt.Printf("🔍 LoadExtension called for %s (entry point: %s)\n", path, entryPoint)
+
+	if c == nil {
+		return errors.New("nil sqlite connection")
+	}
+
+	if c.db == nil {
+		return errors.New("sqlite3 connection is closed")
+	}
+
+	cPath := C.CString(path)
+	defer C.free(unsafe.Pointer(cPath))
+
+	var cEntry *C.char
+	if entryPoint != "" {
+		cEntry = C.CString(entryPoint)
+		defer C.free(unsafe.Pointer(cEntry))
+	}
+
+	// First, explicitly enable extension loading
+	fmt.Println("🔧 Enabling extension loading...")
 	rv := C.sqlite3_enable_load_extension(c.db, 1)
 	if rv != C.SQLITE_OK {
-		return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
+		errStr := C.GoString(C.sqlite3_errmsg(c.db))
+		fmt.Printf("❌ Failed to enable extension loading: %s (%d)\n", errStr, rv)
+		return fmt.Errorf("failed to enable extension loading: %s (%d)", errStr, rv)
 	}
+	fmt.Println("✅ Extension loading enabled")
 
-	for _, extension := range extensions {
-		if err := c.loadExtension(extension, nil); err != nil {
-			C.sqlite3_enable_load_extension(c.db, 0)
-			return err
-		}
-	}
-
-	rv = C.sqlite3_enable_load_extension(c.db, 0)
-	if rv != C.SQLITE_OK {
-		return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
-	}
-
-	return nil
-}
-
-// LoadExtension load the sqlite3 extension.
-func (c *SQLiteConn) LoadExtension(lib string, entry string) error {
-	rv := C.sqlite3_enable_load_extension(c.db, 1)
-	if rv != C.SQLITE_OK {
-		return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
-	}
-
-	if err := c.loadExtension(lib, &entry); err != nil {
-		C.sqlite3_enable_load_extension(c.db, 0)
-		return err
-	}
-
-	rv = C.sqlite3_enable_load_extension(c.db, 0)
-	if rv != C.SQLITE_OK {
-		return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
-	}
-
-	return nil
-}
-
-func (c *SQLiteConn) loadExtension(lib string, entry *string) error {
-	clib := C.CString(lib)
-	defer C.free(unsafe.Pointer(clib))
-
-	var centry *C.char
-	if entry != nil {
-		centry = C.CString(*entry)
-		defer C.free(unsafe.Pointer(centry))
-	}
-
+	// Try to load the extension
+	fmt.Printf("🔧 Loading extension %s...\n", path)
 	var errMsg *C.char
-	defer C.sqlite3_free(unsafe.Pointer(errMsg))
-
-	rv := C.sqlite3_load_extension(c.db, clib, centry, &errMsg)
+	rv = C.sqlite3_load_extension(c.db, cPath, cEntry, &errMsg)
+	
 	if rv != C.SQLITE_OK {
-		return errors.New(C.GoString(errMsg))
+		var errStr string
+		if errMsg != nil {
+			errStr = C.GoString(errMsg)
+			C.sqlite3_free(unsafe.Pointer(errMsg))
+		} else {
+			errStr = C.GoString(C.sqlite3_errmsg(c.db))
+		}
+		fmt.Printf("❌ Failed to load extension: %s (%d)\n", errStr, rv)
+		
+		// Disable extension loading before returning
+		C.sqlite3_enable_load_extension(c.db, 0)
+		return fmt.Errorf("failed to load extension: %s (%d)", errStr, rv)
+	}
+
+	fmt.Printf("✅ Extension %s loaded successfully\n", path)
+	
+	// For safety, disable extension loading after successful load
+	rv = C.sqlite3_enable_load_extension(c.db, 0)
+	if rv != C.SQLITE_OK {
+		fmt.Printf("⚠️ Warning: Failed to disable extension loading: %s\n", C.GoString(C.sqlite3_errmsg(c.db)))
 	}
 
 	return nil
 }
-EXTFILE
+
+// EnableLoadExtension enables or disables SQLite extension loading
+func (c *SQLiteConn) EnableLoadExtension(enable bool) error {
+	if c == nil {
+		return errors.New("nil sqlite connection")
+	}
+
+	if c.db == nil {
+		return errors.New("sqlite3 connection is closed")
+	}
+
+	onoff := 0
+	if enable {
+		onoff = 1
+	}
+
+	rv := C.sqlite3_enable_load_extension(c.db, C.int(onoff))
+	if rv != C.SQLITE_OK {
+		return errors.New(C.GoString(C.sqlite3_errmsg(c.db)))
+	}
+
+	return nil
+}
+EOF
+
+# 5. Add code to auto-enable extension loading
+echo "🔧 Adding auto-enabling of extension loading at connection time..."
+
+# Create a new file with a function that auto-enables extension loading
+cat > auto_enable_extensions.go << 'EOF'
+// Copyright (C) 2014 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
+package sqlite3
+
+/*
+#ifndef USE_LIBSQLITE3
+#include "sqlite3-binding.h"
+#else
+#include <sqlite3.h>
+#endif
+#include <stdlib.h>
+
+// Explicitly declare extension loading functions
+int sqlite3_enable_load_extension(sqlite3 *db, int onoff);
+*/
+import "C"
+import "fmt"
+
+// autoEnableLoadExtension is called during connection initialization
+func autoEnableLoadExtension(db *C.sqlite3) {
+	fmt.Println("🔧 Auto-enabling extension loading...")
+	rv := C.sqlite3_enable_load_extension(db, 1)
+	if rv != C.SQLITE_OK {
+		fmt.Printf("⚠️ WARNING: Failed to auto-enable extension loading: %d\n", rv)
+	} else {
+		fmt.Println("✅ Extension loading auto-enabled at connection time")
+	}
+}
+EOF
+
+# 6. Patch sqlite3.go to call our auto-enable function
+echo "🔧 Patching sqlite3.go to call auto-enable function..."
+
+# Find suitable locations after the database is opened to add our auto-enable call
+if [ "$(uname)" = "Darwin" ]; then
+  # First location - the main handle init after openDB
+  LINE_NUM=$(grep -n "func (d \\*SQLiteDriver) Open" sqlite3.go | head -1 | cut -d':' -f1)
+  if [ -n "$LINE_NUM" ]; then
+    FUNC_START=$LINE_NUM
+    OPEN_LINE=$(grep -n -A 50 "func (d \\*SQLiteDriver) Open" sqlite3.go | grep -n "var db \\*C.sqlite3" | head -1 | cut -d':' -f1)
+    if [ -n "$OPEN_LINE" ]; then
+      OPEN_LINE=$((FUNC_START + OPEN_LINE - 1))
+      HANDLE_LINE=$((OPEN_LINE + 10)) # Approximate line where the handle is created
+      
+      # Add an auto-enable call right after the handle is created
+      LINE_NUM=$(grep -n -A 50 "func (d \\*SQLiteDriver) Open" sqlite3.go | grep -n "db, rv := C.sqlite3_open_v2" | head -1 | cut -d':' -f1)
+      if [ -n "$LINE_NUM" ]; then
+        LINE_NUM=$((FUNC_START + LINE_NUM - 1 + 2)) # +2 to get past the if check
+        ed -s sqlite3.go << EOF
+${LINE_NUM}a
+	// Auto-enable extension loading
+	autoEnableLoadExtension(db)
+.
+w
+q
+EOF
+      fi
+    fi
+  fi
+else
+  # For Linux, use sed to insert our call
+  PATTERN="db, rv := C.sqlite3_open_v2"
+  LINE_NUM=$(grep -n "$PATTERN" sqlite3.go | head -1 | cut -d':' -f1)
+  if [ -n "$LINE_NUM" ]; then
+    # Find the next line that's not empty and add our code after it
+    NEXT_LINE=$((LINE_NUM + 2))
+    sed -i "${NEXT_LINE}a \\	// Auto-enable extension loading\\n\\tautoEnableLoadExtension(db)" sqlite3.go
+  fi
 fi
 
 echo "✅ Patching complete!"
+
+# Go back to the main directory
+cd ..
+
+echo "🔍 go.mod file details:"
+cat go.mod
