@@ -88,11 +88,8 @@ jobs:
         sed -i 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1|' sqlite3.go
 
         # Inject enable_load_extension call after successful open
-        sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/a \
-\\n\tfmt.Println("🧪 Calling C.sqlite3_enable_load_extension...");\
-\\n\trv := C.sqlite3_enable_load_extension(db, 1);\
-\\n\tfmt.Printf("🧪 C.sqlite3_enable_load_extension() returned: %d\\n", rv);\
-' sqlite3.go
+        sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/a \\n\\tfmt.Println("🧪 Calling C.sqlite3_enable_load_extension...");\\n\\trv := C.sqlite3_enable_load_extension(db, 1);\\n\\tfmt.Printf("🧪 C.sqlite3_enable_load_extension() returned: %d\\n", rv);' sqlite3.go
+
 
     - name: Force clean Go build
       run: |
