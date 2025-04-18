@@ -59,10 +59,6 @@ func NewServer(dbPath string) (*Server, error) {
 
 	checkSQLiteCompileOptionUsed(db)
 
-	if err := checkSQLiteCompileOptions(db); err != nil {
-		log.Printf("⚠️ SQLite compile options issue: %v", err)
-	}
-
 	if tryDynamicExtensionLoading(db) {
 		log.Println("✅ Dynamic extension loading succeeded")
 	} else {
