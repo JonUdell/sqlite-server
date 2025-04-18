@@ -63,6 +63,19 @@ jobs:
         make CFLAGS="$CFLAGS"
         make install
 
+    - name: 🔎 Check symbols in libsqlite3.a
+      run: |
+        nm -g ~/sqlite/lib/libsqlite3.a | grep sqlite3_enable_load_extension || echo "❌ Symbol not found"
+
+
+    - name: 🔍 Check Go module cache for mattn/go-sqlite3
+      run: |
+        echo "🧹 Looking for any cached sqlite3 artifacts BEFORE patching"
+        find /home/runner/go/pkg/mod/github.com/mattn/ -type f || echo "✅ No cached mattn modules found"
+        echo "🧹 Listing installed Go modules (in module mode)"
+        go list -m all || true
+
+
 
     - name: Patch go-sqlite3
       run: |
