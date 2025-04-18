@@ -79,11 +79,10 @@ jobs:
       run: |
         export CGO_ENABLED=1
         export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
-        export CGO_LDFLAGS="-L$HOME/sqlite/lib -lsqlite3 -ldl -lm"
+        export CGO_LDFLAGS="$HOME/sqlite/lib/libsqlite3.a -ldl -lm"
 
-        # Build with extension loading support and fallback mode
         GOOS=linux GOARCH=amd64 go build -tags "sqlite3_load_extension" -v -o sqlite-server-linux
-
+  
 
     - name: Check dynamic libraries linked
       run: |
