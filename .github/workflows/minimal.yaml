@@ -1,0 +1,98 @@
+name: Minimal SQLite Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc sqlite3 libsqlite3-dev
+      
+      - name: Create test Go program
+        run: |
+          cat > test.go << 'EOF'
+          package main
+          
+          import (
+            "database/sql"
+            "fmt"
+            "log"
+            
+            _ "github.com/mattn/go-sqlite3"
+          )
+          
+          func main() {
+            // Open database
+            db, err := sql.Open("sqlite3", ":memory:?_allow_load_extension=1")
+            if err \!= nil {
+              log.Fatalf("Failed to open database: %v", err)
+            }
+            defer db.Close()
+            
+            // Check SQLite version
+            var version string
+            err = db.QueryRow("SELECT sqlite_version()").Scan(&version)
+            if err \!= nil {
+              log.Printf("Failed to get SQLite version: %v", err)
+            } else {
+              fmt.Printf("SQLite version: %s\n", version)
+            }
+            
+            // Print compile options
+            rows, err := db.Query("PRAGMA compile_options;")
+            if err \!= nil {
+              log.Printf("Failed to query compile options: %v", err)
+            } else {
+              fmt.Println("SQLite compile options:")
+              for rows.Next() {
+                var option string
+                rows.Scan(&option)
+                fmt.Printf("  %s\n", option)
+              }
+              rows.Close()
+            }
+            
+            // Try to enable extension loading
+            fmt.Println("\nTrying to enable extension loading:")
+            _, err = db.Exec("SELECT sqlite3_enable_load_extension(1)")
+            if err \!= nil {
+              fmt.Printf("Failed to enable extensions: %v\n", err)
+            } else {
+              fmt.Println("Successfully enabled extensions")
+            }
+            
+            // Check if extension loading is enabled
+            var allowExt int
+            err = db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt)
+            if err \!= nil {
+              fmt.Printf("Failed to query allow_load_extension: %v\n", err)
+            } else {
+              fmt.Printf("allow_load_extension value: %d\n", allowExt)
+            }
+          }
+          EOF
+      
+      - name: Build and run test
+        run: |
+          # Set up Go module
+          go mod init sqlitetest
+          go get github.com/mattn/go-sqlite3
+          
+          # Build with extension loading enabled
+          echo "Building with system SQLite:"
+          go build -tags "sqlite3_load_extension" -v test.go
+          
+          # Run the test program
+          echo "\n=== Running with system SQLite ==="
+          ./test
