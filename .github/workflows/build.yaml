@@ -19,32 +19,111 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  build-linux:
-    runs-on: ubuntu-latest
-    needs: create-release
-    steps:
-    - uses: actions/checkout@v4
+build-linux:
+  runs-on: ubuntu-latest
+  needs: create-release
+  steps:
+  - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
+  - name: Set up Go
+    uses: actions/setup-go@v4
+    with:
+      go-version: '1.21'
 
-    - name: Build Linux binary
-      run: |
-        GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
+  - name: Install build dependencies
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y build-essential wget tar git
 
-    - name: Create tar.gz archive
-      run: |
-        tar -czf sqlite-server-linux.tar.gz sqlite-server-linux
+  - name: Build static SQLite
+    run: |
+      mkdir -p $HOME/sqlite
+      cd $HOME/sqlite
+      wget https://www.sqlite.org/2024/sqlite-autoconf-3450200.tar.gz
+      tar xzf sqlite-autoconf-3450200.tar.gz
+      cd sqlite-autoconf-3450200
+      ./configure --disable-shared --enable-static
+      make clean
+      make
 
-    - name: Upload Linux release asset
-      uses: softprops/action-gh-release@v2
-      with:
-        files: sqlite-server-linux.tar.gz
-        tag_name: ${{ github.event.inputs.tag }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+build-linux:
+  runs-on: ubuntu-latest
+  needs: create-release
+  steps:
+  - uses: actions/checkout@v4
+
+  - name: Set up Go
+    uses: actions/setup-go@v4
+    with:
+      go-version: '1.21'
+
+  - name: Install build dependencies
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y build-essential wget tar git
+
+  - name: Build static SQLite
+    run: |
+      mkdir -p $HOME/sqlite
+      cd $HOME/sqlite
+      wget https://www.sqlite.org/2024/sqlite-autoconf-3450200.tar.gz
+      tar xzf sqlite-autoconf-3450200.tar.gz
+      cd sqlite-autoconf-3450200
+      ./configure --disable-shared --enable-static
+      make clean
+      make
+
+  - name: Patch and prepare go-sqlite3
+    run: |
+      # Clone mattn/go-sqlite3
+      git clone https://github.com/mattn/go-sqlite3.git $HOME/go-sqlite3
+
+      # Patch it: insert C.sqlite3_enable_load_extension after db open
+      sed -i '/if db == nil {/a C.sqlite3_enable_load_extension(db, 1);' $HOME/go-sqlite3/sqlite3.go
+
+      # Update go.mod to use local patched driver
+      go mod edit -replace github.com/mattn/go-sqlite3=$HOME/go-sqlite3
+      go mod tidy
+
+  - name: Build Linux binary
+    run: |
+      export CGO_ENABLED=1
+      export CGO_CFLAGS="-I$HOME/sqlite/sqlite-autoconf-3450200"
+      export CGO_LDFLAGS="$HOME/sqlite/sqlite-autoconf-3450200/.libs/libsqlite3.a -lm -ldl"
+      go build -v -o sqlite-server-linux
+
+  - name: Package binary and extension
+    run: |
+      tar -czf sqlite-server-linux.tar.gz sqlite-server-linux steampipe_sqlite_github.so
+
+  - name: Upload Linux release asset
+    uses: softprops/action-gh-release@v2
+    with:
+      files: sqlite-server-linux.tar.gz
+      tag_name: ${{ github.event.inputs.tag }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+  
+
+  - name: Build Linux binary
+    run: |
+      export CGO_ENABLED=1
+      export CGO_CFLAGS="-I$HOME/sqlite/sqlite-autoconf-3450200"
+      export CGO_LDFLAGS="$HOME/sqlite/sqlite-autoconf-3450200/.libs/libsqlite3.a -lm -ldl"
+      go build -v -o sqlite-server-linux
+
+  - name: Package binary and extension
+    run: |
+      tar -czf sqlite-server-linux.tar.gz sqlite-server-linux steampipe_sqlite_github.so
+
+  - name: Upload Linux release asset
+    uses: softprops/action-gh-release@v2
+    with:
+      files: sqlite-server-linux.tar.gz
+      tag_name: ${{ github.event.inputs.tag }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+
 
   build-mac:
     runs-on: macos-latest
