@@ -67,7 +67,6 @@ jobs:
       run: |
         nm -g ~/sqlite/lib/libsqlite3.a | grep sqlite3_enable_load_extension || echo "❌ Symbol not found"
 
-
     - name: 🔍 Check Go module cache for mattn/go-sqlite3
       run: |
         echo "🧹 Looking for any cached sqlite3 artifacts BEFORE patching"
@@ -75,81 +74,15 @@ jobs:
         echo "🧹 Listing installed Go modules (in module mode)"
         go list -m all || true
 
-
-    - name: Patch go-sqlite3
+    - name: Patch go-sqlite3 using script
       run: |
-        go clean -modcache
-        git clone https://github.com/mattn/go-sqlite3.git
-        go mod edit -replace github.com/mattn/go-sqlite3=./go-sqlite3
-        cd go-sqlite3
-
-        # 1. Apply robust extension loading patch
-        # First: Add the extension loading flags to CGO
-        sed -i 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1|' sqlite3.go
-        
-        # 2. Declare the C function in the Go code
-        # Add the C function declaration to the top of the file
-        sed -i '/^\/\/ #include <sqlite3ext.h>/a int sqlite3_enable_load_extension(sqlite3 *db, int onoff);' sqlite3.go
-        
-        # 3. Create a complete patch for enabling extension loading at connection time
-        cat > conn_patch.go << 'EOF'
-// LoadExtension loads a SQLite extension into the connection
-func (c *SQLiteConn) LoadExtension(path string, entryPoint string) error {
-	cPath := C.CString(path)
-	defer C.free(unsafe.Pointer(cPath))
-
-	var cEP *C.char
-	if entryPoint != "" {
-		cEP = C.CString(entryPoint)
-		defer C.free(unsafe.Pointer(cEP))
-	}
-
-	db := c.db
-	if db == nil {
-		return errors.New("sqlite3 connection is closed")
-	}
-
-	// First, enable extension loading
-	rv := C.sqlite3_enable_load_extension(db, 1)
-	if rv != C.SQLITE_OK {
-		return c.lastError()
-	}
-
-	var errMsg *C.char
-	rv = C.sqlite3_load_extension(db, cPath, cEP, &errMsg)
-	if rv != C.SQLITE_OK {
-		defer C.sqlite3_free(unsafe.Pointer(errMsg))
-		return errors.New(C.GoString(errMsg))
-	}
-	return nil
-}
-EOF
-
-        # Add the LoadExtension method to conn.go
-        sed -i '/^func (c \*SQLiteConn) Close() error {/i \\n'"$(cat conn_patch.go)"'\n' conn.go
-        
-        # 4. Create patch to enable extension loading at connection initialization
-        cat > extension_patch.go <<'EOF'
-        // Enable extension loading immediately
-        if rv := C.sqlite3_enable_load_extension(db, 1); rv != C.SQLITE_OK {
-            fmt.Printf("Warning: Failed to enable extension loading: %d\n", rv)
-        } else {
-            fmt.Println("✅ Successfully enabled extension loading at connection time")
-        }
-EOF
-
-        # Insert the patch right after the db is opened
-        sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/r extension_patch.go' sqlite3.go
-
-        # Clean up
-        rm extension_patch.go conn_patch.go
-
+        chmod +x patch-go-sqlite3.sh
+        ./patch-go-sqlite3.sh
 
     - name: Force clean Go build
       run: |
         go clean -cache -modcache -i -r
         rm -f sqlite-server-linux || true
-
 
     - name: Build sqlite-server
       run: |
