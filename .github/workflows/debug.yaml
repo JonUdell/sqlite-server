@@ -254,8 +254,23 @@ jobs:
       run: |
         echo "Testing with system SQLite..."
         export CGO_ENABLED=1
-        go build -tags "sqlite3_load_extension" -v extension_test.go
-        ./extension_test debug
+        
+        # Show current directory and files
+        echo "Current directory: $(pwd)"
+        echo "Files in directory:"
+        ls -la
+        
+        # Ensure we build with correct output name
+        go build -tags "sqlite3_load_extension" -v -o extension_test extension_test.go
+        
+        # Make sure file exists before running
+        if [ -f "./extension_test" ]; then
+          echo "Running extension_test..."
+          ./extension_test debug
+        else
+          echo "ERROR: extension_test binary not found after build!"
+          ls -la
+        fi
 
     - name: Build and test with custom SQLite
       run: |
@@ -263,8 +278,16 @@ jobs:
         export CGO_ENABLED=1
         export CGO_CFLAGS="-I$HOME/sqlite/include"
         export CGO_LDFLAGS="-L$HOME/sqlite/lib -lsqlite3"
+        
         go build -tags "sqlite3_load_extension" -v -o extension_test_custom extension_test.go
-        LD_LIBRARY_PATH=$HOME/sqlite/lib ./extension_test_custom debug
+        
+        if [ -f "./extension_test_custom" ]; then
+          echo "Running custom extension test..."
+          LD_LIBRARY_PATH=$HOME/sqlite/lib ./extension_test_custom debug
+        else
+          echo "ERROR: extension_test_custom binary not found after build!"
+          ls -la
+        fi
 
     - name: Advanced debugging
       if: ${{ github.event.inputs.debug_level == '3' }}
@@ -410,18 +433,37 @@ jobs:
         }
         EOF
         
+        # Show current directory and files before building
+        echo "Current directory: $(pwd)"
+        echo "Files in directory:"
+        ls -la
+        
         # Build and run both non-static and static versions
         echo "🔧 Building and testing with system SQLite..."
         export CGO_ENABLED=1
         go build -tags "sqlite3_load_extension" -v -o sqlite_server_diagnostic_system sqlite_server_diagnostic.go
-        ./sqlite_server_diagnostic_system tryload
+        
+        if [ -f "./sqlite_server_diagnostic_system" ]; then
+          echo "Running system SQLite diagnostic..."
+          ./sqlite_server_diagnostic_system tryload
+        else
+          echo "ERROR: sqlite_server_diagnostic_system binary not found after build!"
+          ls -la
+        fi
         
         echo "🔧 Building and testing with static custom SQLite..."
         export CGO_ENABLED=1
         export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
         export CGO_LDFLAGS="-static $HOME/sqlite/lib/libsqlite3.a -ldl -lm"
         go build -tags "sqlite3_load_extension" -ldflags="-linkmode external" -v -o sqlite_server_diagnostic_static sqlite_server_diagnostic.go
-        ./sqlite_server_diagnostic_static tryload
+        
+        if [ -f "./sqlite_server_diagnostic_static" ]; then
+          echo "Running static SQLite diagnostic..."
+          ./sqlite_server_diagnostic_static tryload
+        else
+          echo "ERROR: sqlite_server_diagnostic_static binary not found after build!"
+          ls -la
+        fi
         
     - name: Test build-local script simulation
       run: |
@@ -429,12 +471,16 @@ jobs:
         
         # Get current directory
         pwd=$(pwd)
+        echo "Current directory: $(pwd)"
+        echo "Files in directory:"
+        ls -la
         
         # Create simulation of build-local.sh for Linux
         cat > build-linux-test.sh << EOF
         #!/bin/bash
-        set -e
+        set -ex
         
+        echo "Building with approach similar to local Mac build..."
         export CGO_ENABLED=1
         export CGO_CFLAGS="-I\$HOME/sqlite/include"
         export CGO_LDFLAGS="\$HOME/sqlite/lib/libsqlite3.a -lm -ldl"
@@ -445,6 +491,11 @@ jobs:
         chmod +x build-linux-test.sh
         ./build-linux-test.sh
         
-        # Test the binary built with local script approach
-        echo "🧪 Testing extension loading with build-local approach binary..."
-        ./sqlite-server-build-local
+        # Verify the file exists
+        if [ -f "./sqlite-server-build-local" ]; then
+          echo "🧪 Testing extension loading with build-local approach binary..."
+          ./sqlite-server-build-local
+        else
+          echo "ERROR: sqlite-server-build-local binary not found after build!"
+          ls -la
+        fi
