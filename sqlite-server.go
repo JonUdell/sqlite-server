@@ -57,6 +57,16 @@ func NewServer(dbPath string) (*Server, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
+
+    // 🔥 Force enable load_extension immediately
+    if _, err := db.Exec(`SELECT sqlite3_enable_load_extension(1)`); err != nil {
+        log.Printf("⚠️ Failed to enable load_extension at runtime: %v", err)
+    } else {
+        log.Println("✅ Successfully enabled load_extension at runtime")
+    }
+
+    log.Println("🔍 Checking sqlite3_compileoption_used() at runtime:")
+
 	checkSQLiteCompileOptionUsed(db)
 
 	if tryDynamicExtensionLoading(db) {
