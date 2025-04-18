@@ -86,15 +86,16 @@ jobs:
         # Apply minimal patch: enable extension loading
         sed -i 's|#cgo CFLAGS:|#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1|' sqlite3.go
 
-        # Create a small temp file with the Go code we want to insert
-        cat <<EOF > extension_patch.go
-        fmt.Println("🧪 Calling C.sqlite3_enable_load_extension...");
-        rv := C.sqlite3_enable_load_extension(db, 1);
-        fmt.Printf("🧪 C.sqlite3_enable_load_extension() returned: %d\n", rv);
+        # Create a temp Go snippet to inject
+        cat > extension_patch.go <<'EOF'
+        fmt.Println("🧪 Calling C.sqlite3_enable_load_extension...")
+        rv := C.sqlite3_enable_load_extension(db, 1)
+        fmt.Printf("🧪 C.sqlite3_enable_load_extension() returned: %d\n", rv)
         EOF
 
-        # Use sed to insert the temp file contents at the right place
+        # Insert the patch cleanly into sqlite3.go
         sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/r extension_patch.go' sqlite3.go
+
 
         # Clean up
         rm extension_patch.go

@@ -292,3 +292,159 @@ jobs:
         if [ "${{ github.event.inputs.debug_level }}" == "3" ]; then
             sudo LD_LIBRARY_PATH=$HOME/sqlite/lib ./extension_test_custom debug
         fi
+        
+    - name: Run specific sqlite-server diagnostic test
+      run: |
+        # Create a specialized test program to verify SQLite extension loading works with proper static linking
+        cat > sqlite_server_diagnostic.go <<'EOF'
+        package main
+
+        import (
+          "database/sql"
+          "fmt"
+          "log"
+          "os"
+          _ "github.com/mattn/go-sqlite3"
+        )
+
+        func main() {
+          log.SetFlags(log.LstdFlags | log.Lshortfile)
+          
+          log.Println("🔍 SQLite Server Extension Loading Diagnostic")
+          log.Println("============================================")
+          
+          // Try to open the database with extension loading enabled
+          log.Println("🔍 Opening database with _allow_load_extension=1...")
+          db, err := sql.Open("sqlite3", ":memory:?_allow_load_extension=1")
+          if err != nil {
+            log.Fatalf("Failed to open database: %v", err)
+          }
+          defer db.Close()
+          
+          // Check SQLite version first
+          var version string
+          err = db.QueryRow("SELECT sqlite_version()").Scan(&version)
+          if err != nil {
+            log.Printf("❌ Failed to get SQLite version: %v", err)
+          } else {
+            log.Printf("✅ SQLite version: %s", version)
+          }
+          
+          // Print all compile options to see what's available
+          log.Println("🔍 Checking all SQLite compile options:")
+          rows, err := db.Query("PRAGMA compile_options;")
+          if err != nil {
+            log.Printf("❌ Failed to query compile options: %v", err)
+          } else {
+            defer rows.Close()
+            for rows.Next() {
+              var option string
+              rows.Scan(&option)
+              log.Printf("  - %s", option)
+            }
+          }
+          
+          // Try BOTH ways of enabling extension loading
+          
+          // Method 1: via connection string parameter
+          log.Println("🔍 Method 1: Checking if extension loading is enabled via connection string...")
+          var allowExt int
+          err = db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt)
+          if err != nil {
+            log.Printf("❌ Could not query allow_load_extension setting: %v", err)
+          } else {
+            log.Printf("🔍 allow_load_extension PRAGMA value: %d", allowExt)
+          }
+          
+          // Method 2: via SQL
+          log.Println("🔍 Method 2: Trying to enable extension loading via SQL...")
+          _, err = db.Exec("SELECT sqlite3_enable_load_extension(1)")
+          if err != nil {
+            log.Printf("❌ Failed to enable load_extension via SQL: %v", err)
+          } else {
+            log.Println("✅ Successfully enabled load_extension via SQL")
+            
+            // Verify setting after SQL enable
+            db.QueryRow("PRAGMA allow_load_extension;").Scan(&allowExt)
+            log.Printf("🔍 allow_load_extension PRAGMA value after SQL enable: %d", allowExt)
+          }
+          
+          // Check if SQLITE_ENABLE_LOAD_EXTENSION was compiled in
+          log.Println("🔍 Checking compile options for extension loading...")
+          var enableLoadExt, allowLoadExt int
+          db.QueryRow("SELECT sqlite_compileoption_used('SQLITE_ENABLE_LOAD_EXTENSION')").Scan(&enableLoadExt)
+          db.QueryRow("SELECT sqlite_compileoption_used('SQLITE_ALLOW_LOAD_EXTENSION')").Scan(&allowLoadExt)
+          log.Printf("✅ SQLITE_ENABLE_LOAD_EXTENSION compile option: %d", enableLoadExt)
+          log.Printf("✅ SQLITE_ALLOW_LOAD_EXTENSION compile option: %d", allowLoadExt)
+          
+          // Get sqlite3_load_extension symbol status
+          log.Println("🔍 Checking load_extension function availability...")
+          var result string
+          err = db.QueryRow("SELECT CASE WHEN (SELECT COUNT(*) FROM pragma_function_list WHERE name='load_extension')>0 THEN 'Available' ELSE 'Not Available' END").Scan(&result)
+          if err != nil {
+            log.Printf("❌ Error checking load_extension function: %v", err)
+          } else {
+            log.Printf("🔍 load_extension function is: %s", result)
+          }
+          
+          // Try loading our test extension
+          if len(os.Args) > 1 && os.Args[1] == "tryload" {
+            extensionPath := "./test_extension.so"
+            log.Printf("🔍 Attempting to load extension from %s...", extensionPath)
+            _, err = db.Exec("SELECT load_extension(?)", extensionPath)
+            if err != nil {
+              log.Printf("❌ Failed to load extension: %v", err)
+            } else {
+              log.Println("✅ Successfully loaded extension!")
+              
+              // Test extension function
+              var hello string
+              err = db.QueryRow("SELECT hello_ext()").Scan(&hello)
+              if err != nil {
+                log.Printf("❌ Failed to call extension function: %v", err)
+              } else {
+                log.Printf("✅ Extension function result: %s", hello)
+              }
+            }
+          }
+        }
+        EOF
+        
+        # Build and run both non-static and static versions
+        echo "🔧 Building and testing with system SQLite..."
+        export CGO_ENABLED=1
+        go build -tags "sqlite3_load_extension" -v -o sqlite_server_diagnostic_system sqlite_server_diagnostic.go
+        ./sqlite_server_diagnostic_system tryload
+        
+        echo "🔧 Building and testing with static custom SQLite..."
+        export CGO_ENABLED=1
+        export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
+        export CGO_LDFLAGS="-static $HOME/sqlite/lib/libsqlite3.a -ldl -lm"
+        go build -tags "sqlite3_load_extension" -ldflags="-linkmode external" -v -o sqlite_server_diagnostic_static sqlite_server_diagnostic.go
+        ./sqlite_server_diagnostic_static tryload
+        
+    - name: Test build-local script simulation
+      run: |
+        echo "🧪 Testing build script similar to local Mac build..."
+        
+        # Get current directory
+        pwd=$(pwd)
+        
+        # Create simulation of build-local.sh for Linux
+        cat > build-linux-test.sh << EOF
+        #!/bin/bash
+        set -e
+        
+        export CGO_ENABLED=1
+        export CGO_CFLAGS="-I\$HOME/sqlite/include"
+        export CGO_LDFLAGS="\$HOME/sqlite/lib/libsqlite3.a -lm -ldl"
+        
+        go build -tags "sqlite3_load_extension" -v -o sqlite-server-build-local
+        EOF
+        
+        chmod +x build-linux-test.sh
+        ./build-linux-test.sh
+        
+        # Test the binary built with local script approach
+        echo "🧪 Testing extension loading with build-local approach binary..."
+        ./sqlite-server-build-local
