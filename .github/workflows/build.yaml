@@ -90,9 +90,9 @@ jobs:
         export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
         export CGO_LDFLAGS="-static $HOME/sqlite/lib/libsqlite3.a -ldl -lm"
 
+        # Removed -linkmode external flag to use internal linker
         GOOS=linux GOARCH=amd64 go build \
           -tags "sqlite3_load_extension" \
-          -ldflags="-linkmode external" \
           -v -o sqlite-server-linux
 
     - name: Check dynamic libraries linked
