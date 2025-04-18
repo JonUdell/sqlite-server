@@ -81,8 +81,12 @@ jobs:
         export CGO_CFLAGS="-I$HOME/sqlite/include -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1"
         export CGO_LDFLAGS="$HOME/sqlite/lib/libsqlite3.a -ldl -lm"
 
-        GOOS=linux GOARCH=amd64 go build -tags "sqlite3_load_extension" -v -o sqlite-server-linux
-  
+        GOOS=linux GOARCH=amd64 go build \
+          -tags "sqlite3_load_extension" \
+          -ldflags="-linkmode external -extldflags '-Wl,-export_dynamic'" \
+          -v -o sqlite-server-linux
+
+
 
     - name: Check dynamic libraries linked
       run: |
