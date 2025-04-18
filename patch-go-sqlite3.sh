@@ -40,7 +40,28 @@ if ! grep -q "sqlite3_enable_load_extension" sqlite3.go; then
   fi
 fi
 
-# 3. Enable extension loading at connection initialization
+# 3. Update build tags to ensure extension loading is enabled
+echo "🔧 Adding build tags for extension loading..."
+if [ -f "sqlite3_load_extension.go" ]; then
+  cat > _extension_version.go << 'TAGFILE'
+// Copyright (C) 2019 Yasuhiro Matsumoto <mattn.jp@gmail.com>.
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
+package sqlite3
+
+/*
+#cgo CFLAGS: -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ALLOW_LOAD_EXTENSION=1
+*/
+import "C"
+
+// This file ensures that the extension loading CFLAGS are included
+// in all builds, regardless of build tags.
+TAGFILE
+fi
+
+# 4. Enable extension loading at connection initialization
 echo "🔧 Adding extension loading at connection initialization..."
 # Create patch for enabling extension loading when opening a connection
 if ! grep -q "Successfully enabled extension loading at connection time" sqlite3.go; then
@@ -73,7 +94,7 @@ EOF
   rm -f extension_patch.go
 fi
 
-# 4. Make sure LoadExtension method is properly enabled
+# 5. Make sure LoadExtension method is properly enabled
 echo "🔧 Ensuring LoadExtension method is enabled..."
 
 # Instead of just commenting out the omit file, create a proper Go file
