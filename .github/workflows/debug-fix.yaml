@@ -1,0 +1,74 @@
+name: Debug SQLite Loading Fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug_level:
+        description: "Debug level (1-3)"
+        required: true
+        type: string
+        default: "2"
+
+jobs:
+  test-sqlite-loading:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          
+      - name: Create simple test program
+        run: |
+          echo "Creating simple SQLite extension loading test..."
+          
+          # Create test program
+          cat > test.go << 'TESTGO'
+          package main
+
+          import (
+            "database/sql"
+            "fmt"
+            "log"
+            _ "github.com/mattn/go-sqlite3"
+          )
+
+          func main() {
+            db, err := sql.Open("sqlite3", ":memory:?_allow_load_extension=1")
+            if err \!= nil {
+              log.Fatalf("Failed to open database: %v", err)
+            }
+            defer db.Close()
+            
+            fmt.Println("SQLite version:")
+            var version string
+            db.QueryRow("SELECT sqlite_version()").Scan(&version)
+            fmt.Println(version)
+            
+            fmt.Println("\nCompile options:")
+            rows, _ := db.Query("PRAGMA compile_options;")
+            for rows.Next() {
+              var option string
+              rows.Scan(&option)
+              fmt.Printf("  %s\n", option)
+            }
+            rows.Close()
+            
+            fmt.Println("\nTesting load_extension:")
+            _, err = db.Exec("SELECT sqlite3_enable_load_extension(1)")
+            if err \!= nil {
+              fmt.Printf("Failed to enable extensions: %v\n", err)
+            } else {
+              fmt.Println("Successfully enabled extensions")
+            }
+          }
+          TESTGO
+          
+          # Set up Go modules
+          go mod init sqlitetest
+          go get github.com/mattn/go-sqlite3
+          
+          # Build and run test
+          go build -tags "sqlite3_load_extension" -v test.go
+          ./test
