@@ -1,0 +1,1 @@
+CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/sqlite/sqlite-autoconf-3450200/include"  CGO_LDFLAGS="$HOME/sqlite/sqlite-autoconf-3450200/lib/libsqlite3.a -lm -ldl" go build -v
