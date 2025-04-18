@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -27,26 +26,7 @@ type Server struct {
 	db *sql.DB
 }
 
-func checkSQLiteCompileOptionUsed(db *sql.DB) {
-	log.Println("🔍 Checking sqlite3_compileoption_used() at runtime:")
-
-	options := []string{
-		"SQLITE_ENABLE_LOAD_EXTENSION",
-		"SQLITE_ALLOW_LOAD_EXTENSION",
-	}
-
-	for _, opt := range options {
-		var enabled int
-		err := db.QueryRow(`SELECT sqlite_compileoption_used(?)`, opt).Scan(&enabled)
-		if err != nil {
-			log.Printf("Error checking option %s: %v", opt, err)
-		} else if enabled == 1 {
-			log.Printf("✅ Runtime compile option enabled: %s", opt)
-		} else {
-			log.Printf("⚠️ Runtime compile option NOT enabled: %s", opt)
-		}
-	}
-}
+// SimplifiedServer version
 
 func NewServer(dbPath string) (*Server, error) {
 	db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
@@ -57,114 +37,30 @@ func NewServer(dbPath string) (*Server, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
+	// Create memory database for extensions
+	if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
+		log.Printf("Failed to attach memory database: %v", err)
+	}
 
-    // 🔥 Force enable load_extension immediately
-    if _, err := db.Exec(`SELECT sqlite3_enable_load_extension(1)`); err != nil {
-        log.Printf("⚠️ Failed to enable load_extension at runtime: %v", err)
-    } else {
-        log.Println("✅ Successfully enabled load_extension at runtime")
-    }
-
-    log.Println("🔍 Checking sqlite3_compileoption_used() at runtime:")
-
-	checkSQLiteCompileOptionUsed(db)
-
-	if tryDynamicExtensionLoading(db) {
-		log.Println("✅ Dynamic extension loading succeeded")
+	// Get the absolute path to the extension file
+	absPath, err := filepath.Abs("steampipe_sqlite_github.so")
+	if err != nil {
+		log.Printf("Warning: failed to get absolute path: %v", err)
+		absPath = "./steampipe_sqlite_github.so"
+	}
+	
+	// Simple extension loading with explicit path and extension
+	log.Printf("Trying to load extension: %s", absPath)
+	if _, err := db.Exec(`SELECT load_extension(?)`, absPath); err != nil {
+		log.Printf("Note: extension loading failed: %v", err)
 	} else {
-		log.Println("⚠️ Dynamic extension loading failed, attempting static extension initialization")
-		if err := StaticExtensionInit(db); err != nil {
-			log.Printf("⚠️ Static extension initialization failed: %v", err)
-		}
+		log.Println("Extension loaded successfully")
 	}
 
 	return &Server{db: db}, nil
 }
 
-// tryDynamicExtensionLoading attempts to load the extension dynamically
-// Returns true if successful, false otherwise
-func tryDynamicExtensionLoading(db *sql.DB) bool {
-    const extensionPath = "steampipe_sqlite_github.so"
-
-    if _, statErr := os.Stat(extensionPath); statErr == nil {
-        // Attach in-memory DB for Steampipe
-        if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
-            log.Printf("Failed to attach memory database: %v", err)
-            return false
-        }
-
-        // Get absolute path to extension for more reliable loading
-        absExtensionPath, err := filepath.Abs(extensionPath)
-        if err != nil {
-            log.Printf("Warning: failed to get absolute path for extension %s: %v", extensionPath, err)
-            absExtensionPath = extensionPath
-        }
-
-        // Try different approaches for loading the extension
-        loadExtensionMethods := []struct {
-            desc string
-            query string
-            args []interface{}
-        }{
-            {"standard way", `SELECT load_extension(?)`, []interface{}{absExtensionPath}},
-            {"without extension", `SELECT load_extension(?)`, []interface{}{strings.TrimSuffix(absExtensionPath, ".so")}},
-            {"direct query", fmt.Sprintf(`SELECT load_extension('%s')`, absExtensionPath), nil},
-            {"with relative path", `SELECT load_extension(?)`, []interface{}{extensionPath}},
-        }
-
-        extensionLoaded := false
-        var lastError error
-
-        for _, method := range loadExtensionMethods {
-            log.Printf("Trying to load extension using %s", method.desc)
-            if method.args != nil {
-                _, err = db.Exec(method.query, method.args...)
-            } else {
-                _, err = db.Exec(method.query)
-            }
-
-            if err != nil {
-                log.Printf("Warning: failed to load extension %s (%s): %v", extensionPath, method.desc, err)
-                lastError = err
-                continue
-            }
-
-            log.Printf("Extension %s loaded successfully using %s", extensionPath, method.desc)
-            extensionLoaded = true
-            break
-        }
-
-        if !extensionLoaded {
-            log.Printf("ERROR: Could not load extension %s after all attempts: %v", extensionPath, lastError)
-            return false
-        }
-
-        // Extension loaded successfully
-        return true
-
-    } else if os.IsNotExist(statErr) {
-        log.Printf("Extension %s not found, skipping dynamic load", extensionPath)
-    } else {
-        log.Printf("Error checking extension %s: %v", extensionPath, statErr)
-    }
-
-    return false
-}
-
-
-// StaticExtensionInit initializes a minimal environment for when extensions can't be loaded
-// This provides a fallback so the server can run without dynamic extension loading
-func StaticExtensionInit(db *sql.DB) error {
-    log.Println("Setting up minimal static environment (no extension functionality)")
-
-    // Just attach the memory database to prevent errors
-    if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
-        return fmt.Errorf("failed to attach memory database: %w", err)
-    }
-
-    log.Println("✅ Server will run without GitHub extension functionality")
-    return nil
-}
+// Simple functions to clean up the code - not used in current version
 
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Handling query request from %s", r.URL.Path)
