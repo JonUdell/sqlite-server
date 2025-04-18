@@ -75,6 +75,12 @@ jobs:
         # Enable load_extension at runtime
         sed -i '/return nil, errors.New("sqlite succeeded without returning a database")/a \\n\tC.sqlite3_enable_load_extension(db, 1)' sqlite3.go
 
+    - name: Force clean Go build
+      run: |
+        go clean -cache -modcache -i -r
+        rm -f sqlite-server-linux || true
+
+
     - name: Build sqlite-server
       run: |
         export CGO_ENABLED=1

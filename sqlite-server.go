@@ -27,74 +27,52 @@ type Server struct {
 	db *sql.DB
 }
 
-func checkSQLiteCompileOptions(db *sql.DB) error {
-    rows, err := db.Query("PRAGMA compile_options;")
-    if err != nil {
-        return fmt.Errorf("failed to query SQLite compile options: %w", err)
-    }
-    defer rows.Close()
+func checkSQLiteCompileOptionUsed(db *sql.DB) {
+	log.Println("🔍 Checking sqlite3_compileoption_used() at runtime:")
 
-    // The extension loading ability is enabled in patched go-sqlite3, so we'll log but not fail
-    required := []string{"SQLITE_ENABLE_LOAD_EXTENSION", "SQLITE_ALLOW_LOAD_EXTENSION"}
-    found := make(map[string]bool)
-    var options []string
+	options := []string{
+		"SQLITE_ENABLE_LOAD_EXTENSION",
+		"SQLITE_ALLOW_LOAD_EXTENSION",
+	}
 
-    for rows.Next() {
-        var option string
-        if err := rows.Scan(&option); err != nil {
-            return fmt.Errorf("failed to scan SQLite compile option: %w", err)
-        }
-        options = append(options, option)
-        for _, req := range required {
-            if strings.Contains(option, req) {
-                found[req] = true
-            }
-        }
-    }
-
-    log.Println("🔍 SQLite Compile Options Found:")
-    for _, opt := range options {
-        log.Printf("  - %s", opt)
-    }
-
-    // Log warnings for missing options but don't fail
-    for _, req := range required {
-        if !found[req] {
-            log.Printf("⚠️ SQLite compile option %s not found, but we'll try loading extensions anyway", req)
-        }
-    }
-
-    log.Println("✅ Proceeding with extension loading capability enabled by patched go-sqlite3 driver")
-    return nil
+	for _, opt := range options {
+		var enabled int
+		err := db.QueryRow(`SELECT sqlite_compileoption_used(?)`, opt).Scan(&enabled)
+		if err != nil {
+			log.Printf("Error checking option %s: %v", opt, err)
+		} else if enabled == 1 {
+			log.Printf("✅ Runtime compile option enabled: %s", opt)
+		} else {
+			log.Printf("⚠️ Runtime compile option NOT enabled: %s", opt)
+		}
+	}
 }
 
 func NewServer(dbPath string) (*Server, error) {
-    db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
-    if err != nil {
-        return nil, err
-    }
+	db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
+	if err != nil {
+		return nil, err
+	}
 
-    db.SetMaxOpenConns(1)
-    db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
-    // Check that required SQLite compile options are present
-    if err := checkSQLiteCompileOptions(db); err != nil {
-        // Not failing on missing compile options
-        log.Printf("⚠️ SQLite compile options issue: %v", err)
-    }
+	checkSQLiteCompileOptionUsed(db)
 
-    // Try dynamic extension loading first, then fall back to static approach
-    if tryDynamicExtensionLoading(db) {
-        log.Println("Dynamic extension loading succeeded")
-    } else {
-        log.Println("Dynamic extension loading failed, trying static approach")
-        // Fall back to static extension initialization
-        if err := StaticExtensionInit(db); err != nil {
-            log.Printf("⚠️ Static extension initialization failed: %v", err)
-        }
-    }
+	if err := checkSQLiteCompileOptions(db); err != nil {
+		log.Printf("⚠️ SQLite compile options issue: %v", err)
+	}
 
-    return &Server{db: db}, nil
+	if tryDynamicExtensionLoading(db) {
+		log.Println("✅ Dynamic extension loading succeeded")
+	} else {
+		log.Println("⚠️ Dynamic extension loading failed, attempting static extension initialization")
+		if err := StaticExtensionInit(db); err != nil {
+			log.Printf("⚠️ Static extension initialization failed: %v", err)
+		}
+	}
+
+	return &Server{db: db}, nil
 }
 
 // tryDynamicExtensionLoading attempts to load the extension dynamically
@@ -115,7 +93,7 @@ func tryDynamicExtensionLoading(db *sql.DB) bool {
             log.Printf("Warning: failed to get absolute path for extension %s: %v", extensionPath, err)
             absExtensionPath = extensionPath
         }
-        
+
         // Try different approaches for loading the extension
         loadExtensionMethods := []struct {
             desc string
@@ -127,10 +105,10 @@ func tryDynamicExtensionLoading(db *sql.DB) bool {
             {"direct query", fmt.Sprintf(`SELECT load_extension('%s')`, absExtensionPath), nil},
             {"with relative path", `SELECT load_extension(?)`, []interface{}{extensionPath}},
         }
-        
+
         extensionLoaded := false
         var lastError error
-        
+
         for _, method := range loadExtensionMethods {
             log.Printf("Trying to load extension using %s", method.desc)
             if method.args != nil {
@@ -138,32 +116,32 @@ func tryDynamicExtensionLoading(db *sql.DB) bool {
             } else {
                 _, err = db.Exec(method.query)
             }
-            
+
             if err != nil {
                 log.Printf("Warning: failed to load extension %s (%s): %v", extensionPath, method.desc, err)
                 lastError = err
                 continue
             }
-            
+
             log.Printf("Extension %s loaded successfully using %s", extensionPath, method.desc)
             extensionLoaded = true
             break
         }
-        
+
         if !extensionLoaded {
             log.Printf("ERROR: Could not load extension %s after all attempts: %v", extensionPath, lastError)
             return false
         }
-        
+
         // Extension loaded successfully
         return true
-        
+
     } else if os.IsNotExist(statErr) {
         log.Printf("Extension %s not found, skipping dynamic load", extensionPath)
     } else {
         log.Printf("Error checking extension %s: %v", extensionPath, statErr)
     }
-    
+
     return false
 }
 
@@ -172,12 +150,12 @@ func tryDynamicExtensionLoading(db *sql.DB) bool {
 // This provides a fallback so the server can run without dynamic extension loading
 func StaticExtensionInit(db *sql.DB) error {
     log.Println("Setting up minimal static environment (no extension functionality)")
-    
+
     // Just attach the memory database to prevent errors
     if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
         return fmt.Errorf("failed to attach memory database: %w", err)
     }
-    
+
     log.Println("✅ Server will run without GitHub extension functionality")
     return nil
 }
