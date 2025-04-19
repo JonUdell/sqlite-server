@@ -42,12 +42,8 @@ func NewServer(dbPath string) (*Server, error) {
 		log.Printf("Failed to attach memory database: %v", err)
 	}
 
-	// Get the absolute path to the extension file
-	absPath, err := filepath.Abs("steampipe_sqlite_github.so")
-	if err != nil {
-		log.Printf("Warning: failed to get absolute path: %v", err)
-		absPath = "./steampipe_sqlite_github.so"
-	}
+	absPath := "./steampipe_sqlite_github"
+	
 	
 	// Simple extension loading with explicit path and extension
 	log.Printf("Trying to load extension: %s", absPath)
