@@ -30,6 +30,47 @@ jobs:
       with:
         go-version: '1.21'
 
+    - name: Prepare go-sqlite3 script
+      run: |
+        cat > prepare-go-sqlite3.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        echo "🔧 Preparing patched go-sqlite3 driver..."
+        
+        # Clone the repository
+        git clone https://github.com/mattn/go-sqlite3.git /Users/runner/go-sqlite3
+        cd /Users/runner/go-sqlite3
+        
+        # Function to apply patches with platform detection
+        apply_patch() {
+          local file=$1
+          local search=$2
+          local replace=$3
+          
+          # Check if running on macOS
+          if [[ "$(uname)" == "Darwin" ]]; then
+            # macOS requires an extension argument for -i
+            sed -i '' "s|$search|$replace|g" "$file"
+          else
+            # Linux version
+            sed -i "s|$search|$replace|g" "$file"
+          fi
+        }
+        
+        # Add code to enable SQLite extensions
+        apply_patch "sqlite3.go" "func (c *SQLiteConn) Close() error {" "func (c *SQLiteConn) enableLoadExtension(enable bool) error {\n\tdb := c.db\n\tif db == nil {\n\t\treturn errors.New(\"database is closed\")\n\t}\n\treturn C.sqlite3_enable_load_extension(db, C.int(boolToInt(enable)))\n}\n\nfunc (c *SQLiteConn) Close() error {"
+        
+        # Modify connection strings to enable extensions by default
+        apply_patch "sqlite3.go" "func (c *SQLiteConn) exec(cmd string) error {" "func (c *SQLiteConn) exec(cmd string) error {\n\tc.enableLoadExtension(true)\n"
+        
+        echo "✅ go-sqlite3 patching complete!"
+        EOF
+        chmod +x prepare-go-sqlite3.sh
+
+    - name: Run prepare script
+      run: |
+        ./prepare-go-sqlite3.sh
+
     - name: Build Linux binary
       run: |
         GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
@@ -56,6 +97,47 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.21'
+
+    - name: Prepare go-sqlite3 script
+      run: |
+        cat > prepare-go-sqlite3.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        echo "🔧 Preparing patched go-sqlite3 driver..."
+        
+        # Clone the repository
+        git clone https://github.com/mattn/go-sqlite3.git /Users/runner/go-sqlite3
+        cd /Users/runner/go-sqlite3
+        
+        # Function to apply patches with platform detection
+        apply_patch() {
+          local file=$1
+          local search=$2
+          local replace=$3
+          
+          # Check if running on macOS
+          if [[ "$(uname)" == "Darwin" ]]; then
+            # macOS requires an extension argument for -i
+            sed -i '' "s|$search|$replace|g" "$file"
+          else
+            # Linux version
+            sed -i "s|$search|$replace|g" "$file"
+          fi
+        }
+        
+        # Add code to enable SQLite extensions
+        apply_patch "sqlite3.go" "func (c *SQLiteConn) Close() error {" "func (c *SQLiteConn) enableLoadExtension(enable bool) error {\n\tdb := c.db\n\tif db == nil {\n\t\treturn errors.New(\"database is closed\")\n\t}\n\treturn C.sqlite3_enable_load_extension(db, C.int(boolToInt(enable)))\n}\n\nfunc (c *SQLiteConn) Close() error {"
+        
+        # Modify connection strings to enable extensions by default
+        apply_patch "sqlite3.go" "func (c *SQLiteConn) exec(cmd string) error {" "func (c *SQLiteConn) exec(cmd string) error {\n\tc.enableLoadExtension(true)\n"
+        
+        echo "✅ go-sqlite3 patching complete!"
+        EOF
+        chmod +x prepare-go-sqlite3.sh
+
+    - name: Run prepare script
+      run: |
+        ./prepare-go-sqlite3.sh
 
     - name: Build macOS ARM64 binary
       run: |
