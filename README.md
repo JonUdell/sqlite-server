@@ -51,10 +51,10 @@ You can use the provided build scripts:
 
 #### Automated Build (Recommended)
 
-For most systems, use the standard build script:
+For Linux AMD64 systems, use:
 
 ```bash
-./build.sh
+./build-linux-amd.sh
 ```
 
 This will:
