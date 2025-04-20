@@ -47,7 +47,32 @@ if _, err := db.Exec(`SELECT load_extension(?)`, absPath); err != nil {
 
 ### Building the Server
 
-#### On macOS
+You can use the provided build scripts:
+
+#### Automated Build (Recommended)
+
+For most systems, use the standard build script:
+
+```bash
+./build.sh
+```
+
+This will:
+- Download and build SQLite with extension loading enabled
+- Download the appropriate Steampipe GitHub extension for your platform
+- Build the SQLite server with the correct flags
+
+#### MacOS ARM (Apple Silicon)
+
+For macOS ARM (Apple Silicon), use the specialized build script:
+
+```bash
+./build-macos-arm.sh
+```
+
+This approach uses a locally patched version of go-sqlite3 to enable extension loading on M1/M2/M3 Macs.
+
+#### Manual Build on macOS
 
 The server must be built with specific flags to link against the custom SQLite:
 
@@ -58,7 +83,7 @@ CGO_LDFLAGS="$HOME/sqlite/sqlite-autoconf-3450200/lib/libsqlite3.a -lm -ldl" \
 go build -v
 ```
 
-#### On Linux
+#### Manual Build on Linux
 
 For Linux, you need to build SQLite with the same flags, and then build the server:
 
