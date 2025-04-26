@@ -32,8 +32,30 @@ cd ../../
 # Download Steampipe SQLite extension for GitHub
 echo "Downloading Steampipe SQLite extension for GitHub..."
 if [ ! -f steampipe_sqlite_github.so ]; then
-  curl -L https://github.com/turbot/steampipe-plugin-github/releases/download/v1.2.0/steampipe_sqlite_github.linux_amd64.tar.gz > ext.tar.gz
+  # Detect OS and architecture
+  OS_TYPE=$(uname -s | tr '[:upper:]' '[:lower:]')
+  ARCH=$(uname -m)
+  if [[ "$ARCH" == "x86_64" ]]; then
+    ARCH="amd64"
+  elif [[ "$ARCH" == "arm64" || "$ARCH" == "aarch64" ]]; then
+    ARCH="arm64"
+  fi
+  
+  # Print detected environment
+  echo "Detected environment: ${OS_TYPE}_${ARCH}"
+  
+  EXTENSION_URL="https://github.com/turbot/steampipe-plugin-github/releases/download/v1.2.0/steampipe_sqlite_github.${OS_TYPE}_${ARCH}.tar.gz"
+  echo "Downloading extension for ${OS_TYPE}_${ARCH} from ${EXTENSION_URL}"
+  
+  curl -L "${EXTENSION_URL}" > ext.tar.gz
   tar xvf ext.tar.gz
+  
+  # Ensure proper permissions
+  chmod 755 steampipe_sqlite_github.so
+  
+  # Verify file type
+  echo "Extension file type:"
+  file steampipe_sqlite_github.so
 fi
 
 # Build the server with required flags and tags
@@ -50,17 +72,41 @@ go build -tags "sqlite3_load_extension" -v
 # Verify the binary was built and check its dependencies
 echo "Build complete. Checking binary dependencies:"
 ls -la sqlite-server
-ldd sqlite-server
+
+# Check binary dependencies using platform-specific commands
+if [[ "$(uname)" == "Darwin" ]]; then
+  # macOS uses otool instead of ldd
+  otool -L sqlite-server
+else
+  # Linux uses ldd
+  ldd sqlite-server
+fi
+
+# Make sure extension is executable
+chmod 755 steampipe_sqlite_github.so
 
 # Test if extensions are working
 echo "Testing extension loading capabilities..."
-./sqlite-server -port 8080 &
+rm -f server.log
+./sqlite-server -port 8080 > server.log 2>&1 &
 SERVER_PID=$!
 sleep 3  # Give server time to start
 
+# Test basic SQLite functionality
 curl -X POST -H "Content-Type: application/json" -d '{"sql":"SELECT sqlite_version()"}' http://localhost:8080/query
 
 # Kill the server
 kill $SERVER_PID
+
+# Check server log for successful extension loading
+if grep -q "Extension loaded successfully" server.log 2>/dev/null; then
+  echo "✅ Extension loaded successfully!"
+else
+  echo "⚠️ Extension loading may have failed. Check logs for details."
+  # Show the relevant part of the log for debugging
+  echo "=== Server Log (extension loading) ==="
+  grep -i "extension" server.log 2>/dev/null || echo "No extension-related log entries found"
+  echo "==================================="
+fi
 
 echo "Build process complete!"
