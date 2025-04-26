@@ -26,9 +26,11 @@ type Server struct {
 	db *sql.DB
 }
 
+
 // SimplifiedServer version
 
-func NewServer(dbPath string) (*Server, error) {
+func NewServer(dbPath string, extensionPath string) (*Server, error) {
+	// Simple connection string with extension loading enabled
 	db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
 	if err != nil {
 		return nil, err
@@ -38,21 +40,33 @@ func NewServer(dbPath string) (*Server, error) {
 	db.SetMaxIdleConns(1)
 
 	// Create memory database for extensions
-	if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS githubmem`); err != nil {
+	if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS extension_mem`); err != nil {
 		log.Printf("Failed to attach memory database: %v", err)
 	}
 
+	// Enable extension loading via PRAGMA
+	if _, err := db.Exec(`PRAGMA load_extension = 1;`); err != nil {
+		log.Printf("Warning: PRAGMA load_extension failed: %v", err)
+	}
+
 	// Get the absolute path to the extension file
-	absPath, err := filepath.Abs("steampipe_sqlite_github.so")
+	absPath, err := filepath.Abs(extensionPath)
 	if err != nil {
 		log.Printf("Warning: failed to get absolute path: %v", err)
-		absPath = "./steampipe_sqlite_github.so"
+		absPath = "./" + extensionPath
 	}
-	
-	// Simple extension loading with explicit path and extension
+
+	// Ensure file has execute permissions (required for Linux)
+	if err := os.Chmod(absPath, 0755); err != nil {
+		log.Printf("Warning: failed to set execute permissions on extension: %v", err)
+	}
+
+	// Log extension loading attempt
 	log.Printf("Trying to load extension: %s", absPath)
+
+	// Attempt to load the extension
 	if _, err := db.Exec(`SELECT load_extension(?)`, absPath); err != nil {
-		log.Printf("Note: extension loading failed: %v", err)
+		log.Printf("Extension loading failed: %v", err)
 	} else {
 		log.Println("Extension loaded successfully")
 	}
@@ -192,6 +206,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 func main() {
 	// Set up command line flags
 	port := flag.String("port", "8080", "Port to run the server on")
+	extension := flag.String("extension", "steampipe_sqlite_github.so", "Path to SQLite extension to load")
 	flag.Parse()
 
 	// Set up logging
@@ -213,7 +228,7 @@ func main() {
 	log.Printf("Files in directory: %v", files)
 
 	// Initialize server
-	server, err := NewServer("data.db")
+	server, err := NewServer("data.db", *extension)
 	if err != nil {
 		log.Fatal(err)
 	}
