@@ -31,18 +31,37 @@ Both flags are crucial:
 In the Go code, extensions are loaded with:
 
 ```go
-// Open database with extension loading enabled
-db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
+	// Create memory database for extensions
+	if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS extension_mem`); err != nil {
+		log.Printf("Failed to attach memory database: %v", err)
+	}
 
-// Get absolute path to extension
-absPath, err := filepath.Abs("steampipe_sqlite_github.so")
+	// Enable extension loading via PRAGMA
+	if _, err := db.Exec(`PRAGMA load_extension = 1;`); err != nil {
+		log.Printf("Warning: PRAGMA load_extension failed: %v", err)
+	}
 
-// Load the extension using prepared statement
-if _, err := db.Exec(`SELECT load_extension(?)`, absPath); err != nil {
-    log.Printf("Note: extension loading failed: %v", err)
-} else {
-    log.Println("Extension loaded successfully")
-}
+	// Get the absolute path to the extension file
+	absPath, err := filepath.Abs(extensionPath)
+	if err != nil {
+		log.Printf("Warning: failed to get absolute path: %v", err)
+		absPath = "./" + extensionPath
+	}
+
+	// Ensure file has execute permissions (required for Linux)
+	if err := os.Chmod(absPath, 0755); err != nil {
+		log.Printf("Warning: failed to set execute permissions on extension: %v", err)
+	}
+
+	// Log extension loading attempt
+	log.Printf("Trying to load extension: %s", absPath)
+
+	// Attempt to load the extension
+	if _, err := db.Exec(`SELECT load_extension(?)`, absPath); err != nil {
+		log.Printf("Extension loading failed: %v", err)
+	} else {
+		log.Println("Extension loaded successfully")
+	}
 ```
 
 ### Building the Server
@@ -132,8 +151,8 @@ This will proxy the request to `https://api.example.com/v1/data`
 ./sqlite-server
 ```
 
-The server listens on port 8080 by default. You can specify a different port:
+The server listens on port 8080 by default. You can specify a different port, and load a Steampipe extension.
 
 ```bash
-./sqlite-server -port 3000
+./sqlite-server [-port 3000] [-extension steampipe-sqlite-mastodon.so]
 ```
