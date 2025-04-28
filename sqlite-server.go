@@ -204,6 +204,10 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 
 func main() {
+
+	// disable steampipe cache
+	os.Setenv("STEAMPIPE_CACHE", "false")
+
 	// Set up command line flags
 	port := flag.String("port", "8080", "Port to run the server on")
 	extension := flag.String("extension", "steampipe_sqlite_github.so", "Path to SQLite extension to load")
