@@ -19,23 +19,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  build-linux:
+  prepare:
     runs-on: ubuntu-latest
-    needs: create-release
     steps:
       - uses: actions/checkout@v4
+      - name: Remove go-sqlite3 replace directive
+        run: |
+          sed -i '/^replace github.com\/mattn\/go-sqlite3 =>/d' go.mod
+      - name: Upload cleaned go.mod and go.sum
+        uses: actions/upload-artifact@v4
+        with:
+          name: gomod
+          path: |
+            go.mod
+            go.sum
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: [create-release, prepare]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: gomod
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-
-      - name: Remove go-sqlite3 replace directive
-        run: |
-          sed -i.bak '/^replace github.com\/mattn\/go-sqlite3 =>/d' go.mod
-
       - run: |
           GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
           tar -czf sqlite-server-linux.tar.gz sqlite-server-linux
-
       - uses: softprops/action-gh-release@v2
         with:
           files: sqlite-server-linux.tar.gz
@@ -48,18 +60,15 @@ jobs:
     needs: build-linux
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: gomod
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-
-      - name: Remove go-sqlite3 replace directive
-        run: |
-          sed -i.bak '' '/^replace github.com\/mattn\/go-sqlite3 =>/d' go.mod
-
       - run: |
           GOOS=darwin GOARCH=arm64 go build -v -o sqlite-server-mac-arm
           tar -czf sqlite-server-mac-arm.tar.gz sqlite-server-mac-arm
-
       - uses: softprops/action-gh-release@v2
         with:
           files: sqlite-server-mac-arm.tar.gz
@@ -72,18 +81,15 @@ jobs:
     needs: build-mac
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: gomod
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-
-      - name: Remove go-sqlite3 replace directive
-        run: |
-          sed -i.bak '/^replace github.com\/mattn\/go-sqlite3 =>/d' go.mod
-
       - run: |
           GOOS=windows GOARCH=amd64 go build -v -o sqlite-server-windows.exe
           zip sqlite-server-windows.zip sqlite-server-windows.exe
-
       - uses: softprops/action-gh-release@v2
         with:
           files: sqlite-server-windows.zip
