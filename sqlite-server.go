@@ -196,7 +196,7 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 	if s.apiDesc == nil {
 		return nil, nil
 	}
-
+	
 	// Strip base path if present
 	basePath := s.apiDesc.BasePath
 	if basePath != "" && strings.HasPrefix(requestPath, basePath) {
@@ -205,7 +205,16 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 			requestPath = "/"
 		}
 	}
-
+	
+	// Normalize the path by removing trailing slashes
+	normalizedPath := strings.TrimSuffix(requestPath, "/")
+	if normalizedPath == "" {
+		normalizedPath = "/"
+	}
+	
+	log.Printf("Trying to match path: %s (normalized: %s)", requestPath, normalizedPath)
+	
+	// First try exact match with normalized path
 	for _, endpoint := range s.apiDesc.Endpoints {
 		re, exists := s.pathRegexps[endpoint.Path]
 		if !exists {
@@ -213,13 +222,31 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 			log.Printf("Warning: No regexp for path %s", endpoint.Path)
 			continue
 		}
-
-		if re.MatchString(requestPath) {
-			params := extractPathParams(requestPath, endpoint.Path, re)
+		
+		if re.MatchString(normalizedPath) {
+			log.Printf("Matched endpoint %s with normalized path", endpoint.Path)
+			params := extractPathParams(normalizedPath, endpoint.Path, re)
 			return &endpoint, params
 		}
 	}
-
+	
+	// If we reach here, try matching with the original path as a fallback
+	if normalizedPath != requestPath {
+		for _, endpoint := range s.apiDesc.Endpoints {
+			re, exists := s.pathRegexps[endpoint.Path]
+			if !exists {
+				continue
+			}
+			
+			if re.MatchString(requestPath) {
+				log.Printf("Matched endpoint %s with original path", endpoint.Path)
+				params := extractPathParams(requestPath, endpoint.Path, re)
+				return &endpoint, params
+			}
+		}
+	}
+	
+	log.Printf("No matching endpoint found for path: %s", requestPath)
 	return nil, nil
 }
 
@@ -378,40 +405,44 @@ func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 // Handle API requests based on the API description
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Handling API request for %s %s", r.Method, r.URL.Path)
-
+	
 	if s.apiDesc == nil {
 		sendErrorResponse(w, "API description not loaded", http.StatusInternalServerError)
 		return
 	}
-
+	
 	// Find the matching endpoint
 	endpoint, pathParams := s.findMatchingEndpoint(r.URL.Path)
 	if endpoint == nil {
+		log.Printf("No endpoint found for %s %s", r.Method, r.URL.Path)
 		http.NotFound(w, r)
 		return
 	}
-
+	
+	log.Printf("Found endpoint %s for %s %s", endpoint.Path, r.Method, r.URL.Path)
+	
 	// Check if the method is supported
 	methodDef, exists := endpoint.Methods[r.Method]
 	if !exists {
+		log.Printf("Method %s not allowed for endpoint %s", r.Method, endpoint.Path)
 		sendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
+	
 	// Extract parameters
 	queryParams := extractQueryParams(r)
-
+	
 	bodyParams, err := extractBodyParams(r)
 	if err != nil {
 		log.Printf("Warning: Failed to parse request body as JSON: %v", err)
 	}
-
+	
 	// Prepare SQL query
 	sqlQuery := methodDef.SQL
-
+	
 	// Replace named parameters with ? placeholders and build params array
 	var sqlParams []interface{}
-
+	
 	// If we have defined params, use them in order
 	if len(methodDef.Params) > 0 {
 		for _, paramName := range methodDef.Params {
@@ -432,14 +463,14 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
+	
 	// Execute the query
 	result, err := s.executeQuery(sqlQuery, sqlParams)
 	if err != nil {
 		sendErrorResponse(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
 		return
 	}
-
+	
 	// Return response
 	s.sendJSONResponse(w, result, http.StatusOK)
 }
