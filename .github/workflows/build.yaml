@@ -27,9 +27,15 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+
+      - name: Remove go-sqlite3 replace directive
+        run: |
+          sed -i.bak '/^replace github.com\/mattn\/go-sqlite3 =>/d' go.mod
+
       - run: |
           GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
           tar -czf sqlite-server-linux.tar.gz sqlite-server-linux
+
       - uses: softprops/action-gh-release@v2
         with:
           files: sqlite-server-linux.tar.gz
@@ -45,9 +51,15 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+
+      - name: Remove go-sqlite3 replace directive
+        run: |
+          sed -i.bak '' '/^replace github.com\/mattn\/go-sqlite3 =>/d' go.mod
+
       - run: |
           GOOS=darwin GOARCH=arm64 go build -v -o sqlite-server-mac-arm
           tar -czf sqlite-server-mac-arm.tar.gz sqlite-server-mac-arm
+
       - uses: softprops/action-gh-release@v2
         with:
           files: sqlite-server-mac-arm.tar.gz
@@ -63,9 +75,15 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+
+      - name: Remove go-sqlite3 replace directive
+        run: |
+          sed -i.bak '/^replace github.com\/mattn\/go-sqlite3 =>/d' go.mod
+
       - run: |
           GOOS=windows GOARCH=amd64 go build -v -o sqlite-server-windows.exe
           zip sqlite-server-windows.zip sqlite-server-windows.exe
+
       - uses: softprops/action-gh-release@v2
         with:
           files: sqlite-server-windows.zip
