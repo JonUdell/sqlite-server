@@ -47,14 +47,15 @@ type MethodDefinition struct {
 }
 
 type Server struct {
-	db         *sql.DB
-	apiDesc    *APIDescription
-	pathRegexps map[string]*regexp.Regexp // Cache for compiled path regexps
+	db           *sql.DB
+	apiDesc      *APIDescription
+	pathRegexps  map[string]*regexp.Regexp // Cache for compiled path regexps
+	showResponses bool                     // Flag to enable/disable response logging
 }
 
 // ===== Server Initialization =====
 
-func NewServer(dbPath string, extensionPath string, apiDescPath string) (*Server, error) {
+func NewServer(dbPath string, extensionPath string, apiDescPath string, showResponses bool) (*Server, error) {
 	// Simple connection string with extension loading enabled
 	db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
 	if err != nil {
@@ -101,8 +102,9 @@ func NewServer(dbPath string, extensionPath string, apiDescPath string) (*Server
 
 	// Initialize the server
 	server := &Server{
-		db:         db,
-		pathRegexps: make(map[string]*regexp.Regexp),
+		db:           db,
+		pathRegexps:  make(map[string]*regexp.Regexp),
+		showResponses: showResponses,
 	}
 
 	// Load the API description if provided
@@ -321,19 +323,47 @@ func (s *Server) executeQuery(sqlQuery string, params []interface{}) ([]map[stri
 		return nil, err
 	}
 
+	// Log the response if enabled
+	if s.showResponses {
+		responseJSON, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			log.Printf("Error marshaling response for logging: %v", err)
+		} else {
+			log.Printf("Response: %s", string(responseJSON))
+		}
+	}
+
 	return result, nil
 }
 
 // ===== HTTP Response Handling =====
 
 // Send JSON response with the given status code
-func sendJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
+func (s *Server) sendJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
-	if err := json.NewEncoder(w).Encode(data); err != nil {
+	// Generate JSON response
+	responseJSON, err := json.Marshal(data)
+	if err != nil {
 		log.Printf("Error encoding JSON response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Log the response if enabled
+	if s.showResponses {
+		var prettyJSON bytes.Buffer
+		if err := json.Indent(&prettyJSON, responseJSON, "", "  "); err != nil {
+			log.Printf("Error prettifying JSON for logging: %v", err)
+		} else {
+			log.Printf("Sending response: %s", prettyJSON.String())
+		}
+	}
+
+	// Send the response
+	if _, err := w.Write(responseJSON); err != nil {
+		log.Printf("Error writing response: %v", err)
 	}
 }
 
@@ -411,7 +441,7 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return response
-	sendJSONResponse(w, result, http.StatusOK)
+	s.sendJSONResponse(w, result, http.StatusOK)
 }
 
 // Handle direct SQL query requests
@@ -450,7 +480,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return response
-	sendJSONResponse(w, result, http.StatusOK)
+	s.sendJSONResponse(w, result, http.StatusOK)
 }
 
 // Handle proxy requests
@@ -501,10 +531,31 @@ func main() {
 	// disable steampipe cache
 	os.Setenv("STEAMPIPE_CACHE", "false")
 
-	// Set up command line flags
-	port := flag.String("port", "8080", "Port to run the server on")
+	// Set custom flag usage to display double dashes for word options
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		flag.VisitAll(func(f *flag.Flag) {
+			prefix := "-"
+			// Use double dash for multi-character flags
+			if len(f.Name) > 1 {
+				prefix = "--"
+			}
+			fmt.Fprintf(flag.CommandLine.Output(), "  %s%s: %s\n", prefix, f.Name, f.Usage)
+		})
+	}
+	
+	// Set up command line flags with long and short versions
+	var portValue string
+	flag.StringVar(&portValue, "port", "8080", "Port to run the server on")
+	flag.StringVar(&portValue, "p", "8080", "Port to run the server on (shorthand)")
 	extension := flag.String("extension", "", "Path to SQLite extension to load")
 	apiDesc := flag.String("api", "", "Path to API description file")
+	showResponses := flag.Bool("show-responses", false, "Enable logging of SQL query responses")
+	
+	// Short-form alias for show-responses
+	var shortShowResponses bool
+	flag.BoolVar(&shortShowResponses, "s", false, "Enable logging of SQL query responses (shorthand)")
+	
 	flag.Parse()
 
 	// Set up logging
@@ -519,7 +570,8 @@ func main() {
 	log.Printf("Working directory: %s", pwd)
 
 	// Initialize server
-	server, err := NewServer("data.db", *extension, *apiDesc)
+	showResponsesEnabled := *showResponses || shortShowResponses
+	server, err := NewServer("data.db", *extension, *apiDesc, showResponsesEnabled)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -577,9 +629,16 @@ func main() {
 		http.ServeFile(w, r, filePath)
 	})
 
+	// Log server settings
+	log.Printf("Server configuration:")
+	log.Printf("- Port: %s", portValue)
+	log.Printf("- API Description: %s", *apiDesc)
+	log.Printf("- Extension: %s", *extension)
+	log.Printf("- Show Responses: %v", showResponsesEnabled)
+
 	// Start server
-	log.Printf("Server listening on port %s...", *port)
-	if err := http.ListenAndServe(":"+*port, corsMiddleware(mux)); err != nil {
+	log.Printf("Server listening on port %s...", portValue)
+	if err := http.ListenAndServe(":"+portValue, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
