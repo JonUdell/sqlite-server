@@ -81,15 +81,28 @@ jobs:
     needs: build-mac
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: gomod
+
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-      - run: |
+
+      - name: Install mingw-w64 for Windows CGO cross-compilation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+
+      - name: Build Windows binary with CGO
+        env:
+          CGO_ENABLED: 1
+          CC: x86_64-w64-mingw32-gcc
+        run: |
           GOOS=windows GOARCH=amd64 go build -v -o sqlite-server-windows.exe
           zip sqlite-server-windows.zip sqlite-server-windows.exe
+
       - uses: softprops/action-gh-release@v2
         with:
           files: sqlite-server-windows.zip
