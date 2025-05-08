@@ -46,11 +46,11 @@ jobs:
         with:
           go-version: '1.21'
       - run: |
-          GOOS=linux GOARCH=amd64 go build -v -o sqlite-server-linux
-          tar -czf sqlite-server-linux.tar.gz sqlite-server-linux
+          GOOS=linux GOARCH=amd64 go build -v -o xmlui-test-server-linux
+          tar -czf xmlui-test-server-linux.tar.gz xmlui-test-server-linux
       - uses: softprops/action-gh-release@v2
         with:
-          files: sqlite-server-linux.tar.gz
+          files: xmlui-test-server-linux.tar.gz
           tag_name: ${{ github.event.inputs.tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -67,11 +67,11 @@ jobs:
         with:
           go-version: '1.21'
       - run: |
-          GOOS=darwin GOARCH=arm64 go build -v -o sqlite-server-mac-arm
-          tar -czf sqlite-server-mac-arm.tar.gz sqlite-server-mac-arm
+          GOOS=darwin GOARCH=arm64 go build -v -o xmlui-test-server-mac-arm
+          tar -czf xmlui-test-server-mac-arm.tar.gz xmlui-test-server-mac-arm
       - uses: softprops/action-gh-release@v2
         with:
-          files: sqlite-server-mac-arm.tar.gz
+          files: xmlui-test-server-mac-arm.tar.gz
           tag_name: ${{ github.event.inputs.tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -100,12 +100,12 @@ jobs:
           CGO_ENABLED: 1
           CC: x86_64-w64-mingw32-gcc
         run: |
-          GOOS=windows GOARCH=amd64 go build -v -o sqlite-server-windows.exe
-          zip sqlite-server-windows.zip sqlite-server-windows.exe
+          GOOS=windows GOARCH=amd64 go build -v -o xmlui-test-server-windows.exe
+          zip xmlui-test-server-windows.zip xmlui-test-server-windows.exe
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: sqlite-server-windows.zip
+          files: xmlui-test-server-windows.zip
           tag_name: ${{ github.event.inputs.tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

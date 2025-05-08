@@ -1,4 +1,4 @@
-# sqlite-server
+# xmlui-test-server
 
 A lightweight HTTP server that:
 
@@ -148,11 +148,11 @@ This will proxy the request to `https://api.example.com/v1/data`
 ## Running the Server
 
 ```bash
-./sqlite-server
+./xmlui-test-server
 ```
 
 The server listens on port 8080 by default. You can specify a different port, and load a Steampipe extension.
 
 ```bash
-./sqlite-server [-port 3000] [-extension steampipe-sqlite-mastodon.so]
+./xmlui-test-server [-port 3000] [-extension steampipe-sqlite-mastodon.so]
 ```
