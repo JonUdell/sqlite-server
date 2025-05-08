@@ -1,10 +1,15 @@
 #!/bin/bash
+
+# This script builds the xmlui-test-server with extension loading for Linux AMD64
+
 set -e
+
+go mod tidy
 
 # Create a clean working directory
 echo "Creating clean working directory..."
-mkdir -p sqlite-server-build
-cd sqlite-server-build
+mkdir -p xmlui-test-server-build
+cd xmlui-test-server-build
 
 # Download and build SQLite with extension loading enabled
 echo "Downloading and building SQLite with extension loading enabled..."
@@ -40,28 +45,28 @@ if [ ! -f steampipe_sqlite_github.so ]; then
   elif [[ "$ARCH" == "arm64" || "$ARCH" == "aarch64" ]]; then
     ARCH="arm64"
   fi
-  
+
   # Print detected environment
   echo "Detected environment: ${OS_TYPE}_${ARCH}"
-  
+
   EXTENSION_URL="https://github.com/turbot/steampipe-plugin-github/releases/download/v1.2.0/steampipe_sqlite_github.${OS_TYPE}_${ARCH}.tar.gz"
   echo "Downloading extension for ${OS_TYPE}_${ARCH} from ${EXTENSION_URL}"
-  
+
   curl -L "${EXTENSION_URL}" > ext.tar.gz
   tar xvf ext.tar.gz
-  
+
   # Ensure proper permissions
   chmod 755 steampipe_sqlite_github.so
-  
+
   # Verify file type
   echo "Extension file type:"
   file steampipe_sqlite_github.so
 fi
 
 # Build the server with required flags and tags
-echo "Building sqlite-server with extension loading support..."
-SQLITE_INSTALL_DIR=$(pwd)/sqlite-server-build/sqlite-install
-rm -f sqlite-server 
+echo "Building xmlui-test-server with extension loading support..."
+SQLITE_INSTALL_DIR=$(pwd)/xmlui-test-server-build/sqlite-install
+rm -f xmlui-test-server
 
 # Set up the environment for go-sqlite3 with extension loading
 CGO_ENABLED=1 \
@@ -71,16 +76,7 @@ go build -tags "sqlite3_load_extension" -v
 
 # Verify the binary was built and check its dependencies
 echo "Build complete. Checking binary dependencies:"
-ls -la sqlite-server
-
-# Check binary dependencies using platform-specific commands
-if [[ "$(uname)" == "Darwin" ]]; then
-  # macOS uses otool instead of ldd
-  otool -L sqlite-server
-else
-  # Linux uses ldd
-  ldd sqlite-server
-fi
+ls -la xmlui-test-server
 
 # Make sure extension is executable
 chmod 755 steampipe_sqlite_github.so
@@ -88,7 +84,7 @@ chmod 755 steampipe_sqlite_github.so
 # Test if extensions are working
 echo "Testing extension loading capabilities..."
 rm -f server.log
-./sqlite-server -port 8080 > server.log 2>&1 &
+./xmlui-test-server -port 8080 > server.log 2>&1 &
 SERVER_PID=$!
 sleep 3  # Give server time to start
 
@@ -110,3 +106,6 @@ else
 fi
 
 echo "Build process complete!"
+echo ""
+echo "To run the server:"
+echo "./xmlui-test-server-macos-arm --extension ./steampipe_sqlite_github.so"
