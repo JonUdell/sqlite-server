@@ -12,8 +12,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -36,7 +38,7 @@ type APIDescription struct {
 }
 
 type EndpointDefinition struct {
-	Path    string                     `json:"path"`
+	Path    string                      `json:"path"`
 	Methods map[string]MethodDefinition `json:"methods"`
 }
 
@@ -47,10 +49,10 @@ type MethodDefinition struct {
 }
 
 type Server struct {
-	db           *sql.DB
-	apiDesc      *APIDescription
-	pathRegexps  map[string]*regexp.Regexp // Cache for compiled path regexps
-	showResponses bool                     // Flag to enable/disable response logging
+	db            *sql.DB
+	apiDesc       *APIDescription
+	pathRegexps   map[string]*regexp.Regexp // Cache for compiled path regexps
+	showResponses bool                      // Flag to enable/disable response logging
 }
 
 // ===== Server Initialization =====
@@ -102,8 +104,8 @@ func NewServer(dbPath string, extensionPath string, apiDescPath string, showResp
 
 	// Initialize the server
 	server := &Server{
-		db:           db,
-		pathRegexps:  make(map[string]*regexp.Regexp),
+		db:            db,
+		pathRegexps:   make(map[string]*regexp.Regexp),
 		showResponses: showResponses,
 	}
 
@@ -196,7 +198,7 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 	if s.apiDesc == nil {
 		return nil, nil
 	}
-	
+
 	// Strip base path if present
 	basePath := s.apiDesc.BasePath
 	if basePath != "" && strings.HasPrefix(requestPath, basePath) {
@@ -205,15 +207,15 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 			requestPath = "/"
 		}
 	}
-	
+
 	// Normalize the path by removing trailing slashes
 	normalizedPath := strings.TrimSuffix(requestPath, "/")
 	if normalizedPath == "" {
 		normalizedPath = "/"
 	}
-	
+
 	log.Printf("Trying to match path: %s (normalized: %s)", requestPath, normalizedPath)
-	
+
 	// First try exact match with normalized path
 	for _, endpoint := range s.apiDesc.Endpoints {
 		re, exists := s.pathRegexps[endpoint.Path]
@@ -222,14 +224,14 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 			log.Printf("Warning: No regexp for path %s", endpoint.Path)
 			continue
 		}
-		
+
 		if re.MatchString(normalizedPath) {
 			log.Printf("Matched endpoint %s with normalized path", endpoint.Path)
 			params := extractPathParams(normalizedPath, endpoint.Path, re)
 			return &endpoint, params
 		}
 	}
-	
+
 	// If we reach here, try matching with the original path as a fallback
 	if normalizedPath != requestPath {
 		for _, endpoint := range s.apiDesc.Endpoints {
@@ -237,7 +239,7 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 			if !exists {
 				continue
 			}
-			
+
 			if re.MatchString(requestPath) {
 				log.Printf("Matched endpoint %s with original path", endpoint.Path)
 				params := extractPathParams(requestPath, endpoint.Path, re)
@@ -245,7 +247,7 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 			}
 		}
 	}
-	
+
 	log.Printf("No matching endpoint found for path: %s", requestPath)
 	return nil, nil
 }
@@ -405,12 +407,12 @@ func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 // Handle API requests based on the API description
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Handling API request for %s %s", r.Method, r.URL.Path)
-	
+
 	if s.apiDesc == nil {
 		sendErrorResponse(w, "API description not loaded", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Find the matching endpoint
 	endpoint, pathParams := s.findMatchingEndpoint(r.URL.Path)
 	if endpoint == nil {
@@ -418,9 +420,9 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	
+
 	log.Printf("Found endpoint %s for %s %s", endpoint.Path, r.Method, r.URL.Path)
-	
+
 	// Check if the method is supported
 	methodDef, exists := endpoint.Methods[r.Method]
 	if !exists {
@@ -428,21 +430,21 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		sendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	// Extract parameters
 	queryParams := extractQueryParams(r)
-	
+
 	bodyParams, err := extractBodyParams(r)
 	if err != nil {
 		log.Printf("Warning: Failed to parse request body as JSON: %v", err)
 	}
-	
+
 	// Prepare SQL query
 	sqlQuery := methodDef.SQL
-	
+
 	// Replace named parameters with ? placeholders and build params array
 	var sqlParams []interface{}
-	
+
 	// If we have defined params, use them in order
 	if len(methodDef.Params) > 0 {
 		for _, paramName := range methodDef.Params {
@@ -463,14 +465,14 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	
+
 	// Execute the query
 	result, err := s.executeQuery(sqlQuery, sqlParams)
 	if err != nil {
 		sendErrorResponse(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Return response
 	s.sendJSONResponse(w, result, http.StatusOK)
 }
@@ -545,8 +547,8 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	// 6. Update the inbound request with subPath and query
 	r.URL.Scheme = targetURL.Scheme
-	r.URL.Host   = targetURL.Host
-	r.URL.Path   = subPath
+	r.URL.Host = targetURL.Host
+	r.URL.Path = subPath
 	r.URL.RawQuery = targetQuery
 
 	// 7. (Optional) Reassign the Host header to match target
@@ -554,6 +556,28 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	// 8. Finally, run the proxy
 	proxy.ServeHTTP(w, r)
+}
+
+func launchBrowser(url string) {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = "open"
+		args = []string{url}
+	case "windows":
+		cmd = "rundll32"
+		args = []string{"url.dll,FileProtocolHandler", url}
+	default: // Unix-like
+		cmd = "xdg-open"
+		args = []string{url}
+	}
+
+	err := exec.Command(cmd, args...).Start()
+	if err != nil {
+		log.Printf("Failed to launch browser: %v", err)
+	}
 }
 
 // ===== Main Application =====
@@ -574,7 +598,7 @@ func main() {
 			fmt.Fprintf(flag.CommandLine.Output(), "  %s%s: %s\n", prefix, f.Name, f.Usage)
 		})
 	}
-	
+
 	// Set up command line flags with long and short versions
 	var portValue string
 	flag.StringVar(&portValue, "port", "8080", "Port to run the server on")
@@ -582,11 +606,11 @@ func main() {
 	extension := flag.String("extension", "", "Path to SQLite extension to load")
 	apiDesc := flag.String("api", "", "Path to API description file")
 	showResponses := flag.Bool("show-responses", false, "Enable logging of SQL query responses")
-	
+
 	// Short-form alias for show-responses
 	var shortShowResponses bool
 	flag.BoolVar(&shortShowResponses, "s", false, "Enable logging of SQL query responses (shorthand)")
-	
+
 	flag.Parse()
 
 	// Set up logging
@@ -668,8 +692,10 @@ func main() {
 	log.Printf("- Show Responses: %v", showResponsesEnabled)
 
 	// Start server
+	launchBrowser("http://localhost:" + portValue)
 	log.Printf("Server listening on port %s...", portValue)
 	if err := http.ListenAndServe(":"+portValue, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
+
 }
