@@ -49,8 +49,8 @@ jobs:
         with:
           go-version: "1.21"
       - run: |
-          GOOS=linux GOARCH=amd64 go build -v -o xmlui-test-server-linux
-          tar -czf xmlui-test-server-linux.tar.gz xmlui-test-server-linux
+          GOOS=linux GOARCH=amd64 go build -v -o xmlui-test-server
+          tar -czf xmlui-test-server-linux.tar.gz xmlui-test-server
       - uses: softprops/action-gh-release@v2
         with:
           files: xmlui-test-server-linux.tar.gz
@@ -70,8 +70,8 @@ jobs:
         with:
           go-version: "1.21"
       - run: |
-          GOOS=darwin GOARCH=arm64 go build -v -o xmlui-test-server-mac-arm
-          tar -czf xmlui-test-server-mac-arm.tar.gz xmlui-test-server-mac-arm
+          GOOS=darwin GOARCH=arm64 go build -v -o xmlui-test-server
+          tar -czf xmlui-test-server-mac-arm.tar.gz xmlui-test-server
       - uses: softprops/action-gh-release@v2
         with:
           files: xmlui-test-server-mac-arm.tar.gz
@@ -103,8 +103,8 @@ jobs:
           CGO_ENABLED: 1
           CC: x86_64-w64-mingw32-gcc
         run: |
-          GOOS=windows GOARCH=amd64 go build -v -o xmlui-test-server-windows.exe
-          zip xmlui-test-server-windows.zip xmlui-test-server-windows.exe
+          GOOS=windows GOARCH=amd64 go build -v -o xmlui-test-server.exe
+          zip xmlui-test-server-windows.zip xmlui-test-server.exe
 
       - uses: softprops/action-gh-release@v2
         with:
