@@ -37,18 +37,21 @@ jobs:
             ext: ""
             archive: tar.gz
             out: xmlui-test-server
+            label: linux-amd
           - os: macos-latest
             goos: darwin
             goarch: arm64
             ext: ""
             archive: tar.gz
             out: xmlui-test-server
+            label: mac-arm
           - os: ubuntu-latest
             goos: windows
             goarch: amd64
             ext: .exe
             archive: zip
             out: xmlui-test-server.exe
+            label: windows
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -74,16 +77,14 @@ jobs:
         run: |
           go build -v -o ${{ matrix.out }}
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
-            zip xmlui-test-server-${{ matrix.goos }}.${{ matrix.archive }} ${{ matrix.out }}
+            zip xmlui-test-server-${{ matrix.label }}.${{ matrix.archive }} ${{ matrix.out }}
           else
-            tar -czf xmlui-test-server-${{ matrix.goos }}.${{ matrix.archive }} ${{ matrix.out }}
+            tar -czf xmlui-test-server-${{ matrix.label }}.${{ matrix.archive }} ${{ matrix.out }}
           fi
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: xmlui-test-server-${{ matrix.goos }}.${{ matrix.archive }}
+          files: xmlui-test-server-${{ matrix.label }}.${{ matrix.archive }}
           tag_name: ${{ github.event.inputs.tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-
-  
