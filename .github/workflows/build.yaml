@@ -86,13 +86,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
-  create-release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+  
