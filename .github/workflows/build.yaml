@@ -73,8 +73,8 @@ jobs:
         with:
           go-version: "1.21"
 
-      - name: Install build tools (Linux/macOS)
-        if: matrix.goos != 'windows'
+      - name: Install build tools (Linux only)
+        if: matrix.os == 'ubuntu-latest' && matrix.goos != 'windows'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential
