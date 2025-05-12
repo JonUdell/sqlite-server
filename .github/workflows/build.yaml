@@ -48,7 +48,7 @@ jobs:
             ext: ""
             archive: tar.gz
             out: xmlui-test-server
-            label: linux-amd
+            label: linux-amd64
           - os: macos-latest
             goos: darwin
             goarch: arm64
