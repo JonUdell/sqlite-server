@@ -56,6 +56,13 @@ jobs:
             archive: tar.gz
             out: xmlui-test-server
             label: mac-arm
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            ext: ""
+            archive: tar.gz
+            out: xmlui-test-server
+            label: mac-amd
           - os: ubuntu-latest
             goos: windows
             goarch: amd64
