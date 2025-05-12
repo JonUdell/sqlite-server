@@ -62,7 +62,7 @@ jobs:
             ext: .exe
             archive: zip
             out: xmlui-test-server.exe
-            label: windows
+            label: windows-amd64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
