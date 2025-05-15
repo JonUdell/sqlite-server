@@ -614,9 +614,6 @@ func launchBrowser(url string) {
 // ===== Main Application =====
 
 func main() {
-	// disable steampipe cache
-	os.Setenv("STEAMPIPE_CACHE", "false")
-
 	// Set custom flag usage to display double dashes for word options
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
@@ -725,11 +722,11 @@ func main() {
 	if *pgConnStr != "" {
 		log.Printf("- Database: PostgreSQL")
 	} else {
+		os.Setenv("STEAMPIPE_CACHE", "false")
 		log.Printf("- Database: SQLite (data.db)")
 	}
 
 	// Start server
-	launchBrowser("http://localhost:" + portValue)
 	log.Printf("Server listening on port %s...", portValue)
 	if err := http.ListenAndServe(":"+portValue, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
