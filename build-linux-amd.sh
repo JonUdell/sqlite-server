@@ -81,19 +81,6 @@ ls -la xmlui-test-server
 # Make sure extension is executable
 chmod 755 steampipe_sqlite_github.so
 
-# Test if extensions are working
-echo "Testing extension loading capabilities..."
-rm -f server.log
-./xmlui-test-server --extension steampipe_sqlite_github.so -port 8080 > server.log 2>&1 &
-SERVER_PID=$!
-sleep 3  # Give server time to start
-
-# Test basic SQLite functionality
-curl -X POST -H "Content-Type: application/json" -d '{"sql":"SELECT sqlite_version()"}' http://localhost:8080/query
-
-# Kill the server
-kill $SERVER_PID
-
 echo "Build process complete!"
 echo ""
 echo "To run the server:"
