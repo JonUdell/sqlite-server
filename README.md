@@ -3,7 +3,7 @@
 A lightweight HTTP server that:
 
 - Serves static files from the current directory
-- Provides a `/query` endpoint that sends SQL statements to a local SQLite database (data.db)
+- Provides a `/query` endpoint that sends SQL statements to a local SQLite database (data.db) or Postgres endpoint
 - Provides a `/proxy` endpoint so JavaScript clients can use APIs that don't support CORS
 - Supports loading SQLite extensions (on both macOS and Linux)
 
@@ -80,8 +80,27 @@ In the Go code, extensions are loaded with:
 ./xmlui-test-server
 ```
 
-The server listens on port 8080 by default. You can specify a different port, and load a Steampipe extension.
+The server listens on port 8080 by default. You can specify a different port.
 
 ```bash
-./xmlui-test-server [-port 3000] [-extension steampipe-sqlite-mastodon.so]
+./xmlui-test-server --port 3000
 ```
+
+You can use SQLite with a Steampipe extension.
+
+```bash
+./xmlui-test-server -extension steampipe-sqlite-mastodon.so
+```
+
+You can use an API description file, show db responses, and capture output to a log file
+
+```bash
+./xmlui-test-server --api api.json -show-responses | tee server_log.txt"
+```
+
+You can use Postgres instead of SQLite
+
+```bash
+./xmlui-test-server --api api.json --pg-conn postgres://steampipe@127.0.0.1:9193/steampipe
+```
+
