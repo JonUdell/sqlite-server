@@ -18,7 +18,8 @@ import (
 	"runtime"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"        // PostgreSQL driver
+	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
 // ===== Data Structures =====
@@ -53,52 +54,72 @@ type Server struct {
 	apiDesc       *APIDescription
 	pathRegexps   map[string]*regexp.Regexp // Cache for compiled path regexps
 	showResponses bool                      // Flag to enable/disable response logging
+	dbType        string                    // Type of database: "sqlite" or "postgres"
 }
 
 // ===== Server Initialization =====
 
-func NewServer(dbPath string, extensionPath string, apiDescPath string, showResponses bool) (*Server, error) {
-	// Simple connection string with extension loading enabled
-	db, err := sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
-	if err != nil {
-		return nil, err
-	}
+func NewServer(dbPath string, pgConnStr string, extensionPath string, apiDescPath string, showResponses bool) (*Server, error) {
+	var db *sql.DB
+	var err error
+	var dbType string
 
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-
-	// Create memory database for extensions
-	if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS extension_mem`); err != nil {
-		log.Printf("Failed to attach memory database: %v", err)
-	}
-
-	// Enable extension loading via PRAGMA
-	if _, err := db.Exec(`PRAGMA load_extension = 1;`); err != nil {
-		log.Printf("Warning: PRAGMA load_extension failed: %v", err)
-	}
-
-	// If extension is provided, try to load it
-	if extensionPath != "" {
-		// Get the absolute path to the extension file
-		absPath, err := filepath.Abs(extensionPath)
+	// Determine which database to use
+	if pgConnStr != "" {
+		// Use PostgreSQL if pgConnStr is provided
+		log.Println("Using PostgreSQL database")
+		db, err = sql.Open("postgres", pgConnStr)
 		if err != nil {
-			log.Printf("Warning: failed to get absolute path: %v", err)
-			absPath = "./" + extensionPath
+			return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+		}
+		dbType = "postgres"
+	} else {
+		// Default to SQLite
+		log.Println("Using SQLite database")
+		// Simple connection string with extension loading enabled
+		db, err = sql.Open("sqlite3", dbPath+"?_allow_load_extension=1")
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to SQLite: %w", err)
+		}
+		dbType = "sqlite"
+
+		// SQLite specific configurations
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+
+		// Create memory database for extensions
+		if _, err := db.Exec(`ATTACH DATABASE ':memory:' AS extension_mem`); err != nil {
+			log.Printf("Failed to attach memory database: %v", err)
 		}
 
-		// Ensure file has execute permissions (required for Linux)
-		if err := os.Chmod(absPath, 0755); err != nil {
-			log.Printf("Warning: failed to set execute permissions on extension: %v", err)
+		// Enable extension loading via PRAGMA
+		if _, err := db.Exec(`PRAGMA load_extension = 1;`); err != nil {
+			log.Printf("Warning: PRAGMA load_extension failed: %v", err)
 		}
 
-		// Log extension loading attempt
-		log.Printf("Trying to load extension: %s", absPath)
+		// If extension is provided, try to load it
+		if extensionPath != "" {
+			// Get the absolute path to the extension file
+			absPath, err := filepath.Abs(extensionPath)
+			if err != nil {
+				log.Printf("Warning: failed to get absolute path: %v", err)
+				absPath = "./" + extensionPath
+			}
 
-		// Attempt to load the extension
-		if _, err := db.Exec(`SELECT load_extension(?)`, absPath); err != nil {
-			log.Printf("Extension loading failed: %v", err)
-		} else {
-			log.Println("Extension loaded successfully")
+			// Ensure file has execute permissions (required for Linux)
+			if err := os.Chmod(absPath, 0755); err != nil {
+				log.Printf("Warning: failed to set execute permissions on extension: %v", err)
+			}
+
+			// Log extension loading attempt
+			log.Printf("Trying to load extension: %s", absPath)
+
+			loadQuery := fmt.Sprintf("SELECT load_extension('%s')", strings.ReplaceAll(absPath, "'", "''"))
+			if _, err := db.Exec(loadQuery); err != nil {
+				log.Printf("Extension loading failed with %v", err)
+			} else {
+				log.Println("Extension loaded successfully")
+			}
 		}
 	}
 
@@ -107,6 +128,7 @@ func NewServer(dbPath string, extensionPath string, apiDescPath string, showResp
 		db:            db,
 		pathRegexps:   make(map[string]*regexp.Regexp),
 		showResponses: showResponses,
+		dbType:        dbType,
 	}
 
 	// Load the API description if provided
@@ -300,6 +322,15 @@ func extractBodyParams(r *http.Request) (map[string]interface{}, error) {
 func (s *Server) executeQuery(sqlQuery string, params []interface{}) ([]map[string]interface{}, error) {
 	// Log the query and params
 	log.Printf("Executing SQL: %s with params: %v", sqlQuery, params)
+
+	// Handle PostgreSQL parameter placeholders ($1, $2, etc.) vs SQLite (?, ?, etc.)
+	if s.dbType == "postgres" {
+		// Replace ? with $1, $2, etc. for PostgreSQL
+		for i := 1; i <= len(params); i++ {
+			sqlQuery = strings.Replace(sqlQuery, "?", fmt.Sprintf("$%d", i), 1)
+		}
+		log.Printf("Converted SQL for PostgreSQL: %s", sqlQuery)
+	}
 
 	// Execute the query
 	rows, err := s.db.Query(sqlQuery, params...)
@@ -583,9 +614,6 @@ func launchBrowser(url string) {
 // ===== Main Application =====
 
 func main() {
-	// disable steampipe cache
-	os.Setenv("STEAMPIPE_CACHE", "false")
-
 	// Set custom flag usage to display double dashes for word options
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
@@ -606,6 +634,7 @@ func main() {
 	extension := flag.String("extension", "", "Path to SQLite extension to load")
 	apiDesc := flag.String("api", "", "Path to API description file")
 	showResponses := flag.Bool("show-responses", false, "Enable logging of SQL query responses")
+	pgConnStr := flag.String("pg-conn", "", "PostgreSQL connection string (if provided, use PostgreSQL instead of SQLite)")
 
 	// Short-form alias for show-responses
 	var shortShowResponses bool
@@ -626,7 +655,7 @@ func main() {
 
 	// Initialize server
 	showResponsesEnabled := *showResponses || shortShowResponses
-	server, err := NewServer("data.db", *extension, *apiDesc, showResponsesEnabled)
+	server, err := NewServer("data.db", *pgConnStr, *extension, *apiDesc, showResponsesEnabled)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -690,12 +719,16 @@ func main() {
 	log.Printf("- API Description: %s", *apiDesc)
 	log.Printf("- Extension: %s", *extension)
 	log.Printf("- Show Responses: %v", showResponsesEnabled)
+	if *pgConnStr != "" {
+		log.Printf("- Database: PostgreSQL")
+	} else {
+		os.Setenv("STEAMPIPE_CACHE", "false")
+		log.Printf("- Database: SQLite (data.db)")
+	}
 
 	// Start server
-	launchBrowser("http://localhost:" + portValue)
 	log.Printf("Server listening on port %s...", portValue)
 	if err := http.ListenAndServe(":"+portValue, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
-
 }
