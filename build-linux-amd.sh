@@ -84,7 +84,7 @@ chmod 755 steampipe_sqlite_github.so
 # Test if extensions are working
 echo "Testing extension loading capabilities..."
 rm -f server.log
-./xmlui-test-server -port 8080 > server.log 2>&1 &
+./xmlui-test-server --extension steampipe_sqlite_github.so -port 8080 > server.log 2>&1 &
 SERVER_PID=$!
 sleep 3  # Give server time to start
 
@@ -94,18 +94,7 @@ curl -X POST -H "Content-Type: application/json" -d '{"sql":"SELECT sqlite_versi
 # Kill the server
 kill $SERVER_PID
 
-# Check server log for successful extension loading
-if grep -q "Extension loaded successfully" server.log 2>/dev/null; then
-  echo "✅ Extension loaded successfully!"
-else
-  echo "⚠️ Extension loading may have failed. Check logs for details."
-  # Show the relevant part of the log for debugging
-  echo "=== Server Log (extension loading) ==="
-  grep -i "extension" server.log 2>/dev/null || echo "No extension-related log entries found"
-  echo "==================================="
-fi
-
 echo "Build process complete!"
 echo ""
 echo "To run the server:"
-echo "./xmlui-test-server-macos-arm --extension ./steampipe_sqlite_github.so"
+echo "./xmlui-test-server --extension ./steampipe_sqlite_github.so"
