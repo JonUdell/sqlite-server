@@ -114,19 +114,11 @@ func NewServer(dbPath string, pgConnStr string, extensionPath string, apiDescPat
 			// Log extension loading attempt
 			log.Printf("Trying to load extension: %s", absPath)
 
-			// Try loading the extension with raw SQL query to avoid parameterization issues
-			// Escape single quotes in the path for SQL safety
 			loadQuery := fmt.Sprintf("SELECT load_extension('%s')", strings.ReplaceAll(absPath, "'", "''"))
 			if _, err := db.Exec(loadQuery); err != nil {
-				log.Printf("Extension loading failed with raw SQL: %v", err)
-				// Fallback to parameterized query
-				if _, err := db.Exec(`SELECT load_extension(?)`, absPath); err != nil {
-					log.Printf("Extension loading also failed with parameterized query: %v", err)
-				} else {
-					log.Println("Extension loaded successfully with parameterized query")
-				}
+				log.Printf("Extension loading failed with %v", err)
 			} else {
-				log.Println("Extension loaded successfully with raw SQL")
+				log.Println("Extension loaded successfully")
 			}
 		}
 	}
