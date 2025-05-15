@@ -45,13 +45,15 @@ type EndpointDefinition struct {
 
 type MethodDefinition struct {
 	Description string   `json:"description"`
-	SQL         string   `json:"sql"`
+	SQL         string   `json:"sql,omitempty"`
+	SQLFile     string   `json:"sqlFile,omitempty"`
 	Params      []string `json:"params,omitempty"`
 }
 
 type Server struct {
 	db            *sql.DB
 	apiDesc       *APIDescription
+	apiDescPath   string                      // Path to the API description file
 	pathRegexps   map[string]*regexp.Regexp // Cache for compiled path regexps
 	showResponses bool                      // Flag to enable/disable response logging
 	dbType        string                    // Type of database: "sqlite" or "postgres"
@@ -129,6 +131,7 @@ func NewServer(dbPath string, pgConnStr string, extensionPath string, apiDescPat
 		pathRegexps:   make(map[string]*regexp.Regexp),
 		showResponses: showResponses,
 		dbType:        dbType,
+		apiDescPath:   apiDescPath,
 	}
 
 	// Load the API description if provided
@@ -471,7 +474,30 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare SQL query
-	sqlQuery := methodDef.SQL
+	sqlQuery := ""
+	
+	// Check if SQL should be loaded from a file
+	if methodDef.SQLFile != "" {
+		// Determine the API description file's directory to make relative paths work
+		apiDir := filepath.Dir(s.apiDescPath)
+		
+		// Build the SQL file path relative to the API description file
+		sqlFilePath := filepath.Join(apiDir, methodDef.SQLFile)
+		log.Printf("Loading SQL from file: %s", sqlFilePath)
+		
+		// Read the SQL file
+		sqlBytes, err := os.ReadFile(sqlFilePath)
+		if err != nil {
+			sendErrorResponse(w, fmt.Sprintf("Failed to read SQL file: %v", err), http.StatusInternalServerError)
+			return
+		}
+		
+		// Use the file contents as the SQL query
+		sqlQuery = string(sqlBytes)
+	} else {
+		// Use the inline SQL from the API definition
+		sqlQuery = methodDef.SQL
+	}
 
 	// Replace named parameters with ? placeholders and build params array
 	var sqlParams []interface{}
