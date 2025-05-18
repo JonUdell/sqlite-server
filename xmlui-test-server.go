@@ -318,6 +318,9 @@ func extractBodyParams(r *http.Request) (map[string]interface{}, error) {
 
 // Execute SQL query and return results as maps
 func (s *Server) executeQuery(sqlQuery string, params []interface{}) ([]map[string]interface{}, error) {
+	// Log the SQL query (just once)
+	log.Printf("SQL: %s", sqlQuery)
+
 	// Handle PostgreSQL parameter placeholders ($1, $2, etc.) vs SQLite (?, ?, etc.)
 	if s.dbType == "postgres" {
 		// Replace ? with $1, $2, etc. for PostgreSQL
@@ -379,11 +382,7 @@ func (s *Server) executeQuery(sqlQuery string, params []interface{}) ([]map[stri
 
 	// Log the response if enabled
 	if s.showResponses {
-		_, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			log.Printf("Error marshaling response for logging: %v", err)
-		}
-		// Response logging will be done in sendJSONResponse
+		// Response logging is done in sendJSONResponse
 	}
 
 	return result, nil
@@ -404,7 +403,7 @@ func (s *Server) sendJSONResponse(w http.ResponseWriter, data interface{}, statu
 		return
 	}
 
-	// Log the response if enabled
+	// Log the response if enabled - this is the ONLY place where responses should be logged
 	if s.showResponses {
 		var prettyJSON bytes.Buffer
 		if err := json.Indent(&prettyJSON, responseJSON, "", "  "); err != nil {
