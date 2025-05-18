@@ -18,7 +18,7 @@ import (
 	"runtime"
 	"strings"
 
-	_ "github.com/lib/pq"        // PostgreSQL driver
+	_ "github.com/lib/pq"           // PostgreSQL driver
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
@@ -53,7 +53,7 @@ type MethodDefinition struct {
 type Server struct {
 	db            *sql.DB
 	apiDesc       *APIDescription
-	apiDescPath   string                      // Path to the API description file
+	apiDescPath   string                    // Path to the API description file
 	pathRegexps   map[string]*regexp.Regexp // Cache for compiled path regexps
 	showResponses bool                      // Flag to enable/disable response logging
 	dbType        string                    // Type of database: "sqlite" or "postgres"
@@ -239,8 +239,6 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 		normalizedPath = "/"
 	}
 
-	log.Printf("Trying to match path: %s (normalized: %s)", requestPath, normalizedPath)
-
 	// First try exact match with normalized path
 	for _, endpoint := range s.apiDesc.Endpoints {
 		re, exists := s.pathRegexps[endpoint.Path]
@@ -251,7 +249,6 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 		}
 
 		if re.MatchString(normalizedPath) {
-			log.Printf("Matched endpoint %s with normalized path", endpoint.Path)
 			params := extractPathParams(normalizedPath, endpoint.Path, re)
 			return &endpoint, params
 		}
@@ -266,14 +263,12 @@ func (s *Server) findMatchingEndpoint(requestPath string) (*EndpointDefinition, 
 			}
 
 			if re.MatchString(requestPath) {
-				log.Printf("Matched endpoint %s with original path", endpoint.Path)
 				params := extractPathParams(requestPath, endpoint.Path, re)
 				return &endpoint, params
 			}
 		}
 	}
 
-	log.Printf("No matching endpoint found for path: %s", requestPath)
 	return nil, nil
 }
 
@@ -323,16 +318,12 @@ func extractBodyParams(r *http.Request) (map[string]interface{}, error) {
 
 // Execute SQL query and return results as maps
 func (s *Server) executeQuery(sqlQuery string, params []interface{}) ([]map[string]interface{}, error) {
-	// Log the query and params
-	log.Printf("Executing SQL: %s with params: %v", sqlQuery, params)
-
 	// Handle PostgreSQL parameter placeholders ($1, $2, etc.) vs SQLite (?, ?, etc.)
 	if s.dbType == "postgres" {
 		// Replace ? with $1, $2, etc. for PostgreSQL
 		for i := 1; i <= len(params); i++ {
 			sqlQuery = strings.Replace(sqlQuery, "?", fmt.Sprintf("$%d", i), 1)
 		}
-		log.Printf("Converted SQL for PostgreSQL: %s", sqlQuery)
 	}
 
 	// Execute the query
@@ -388,12 +379,11 @@ func (s *Server) executeQuery(sqlQuery string, params []interface{}) ([]map[stri
 
 	// Log the response if enabled
 	if s.showResponses {
-		responseJSON, err := json.MarshalIndent(result, "", "  ")
+		_, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			log.Printf("Error marshaling response for logging: %v", err)
-		} else {
-			log.Printf("Response: %s", string(responseJSON))
 		}
+		// Response logging will be done in sendJSONResponse
 	}
 
 	return result, nil
@@ -420,7 +410,7 @@ func (s *Server) sendJSONResponse(w http.ResponseWriter, data interface{}, statu
 		if err := json.Indent(&prettyJSON, responseJSON, "", "  "); err != nil {
 			log.Printf("Error prettifying JSON for logging: %v", err)
 		} else {
-			log.Printf("Sending response: %s", prettyJSON.String())
+			log.Printf("Response: %s", prettyJSON.String())
 		}
 	}
 
@@ -440,7 +430,7 @@ func sendErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 
 // Handle API requests based on the API description
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Handling API request for %s %s", r.Method, r.URL.Path)
+	log.Printf("API: %s %s", r.Method, r.URL.Path)
 
 	if s.apiDesc == nil {
 		sendErrorResponse(w, "API description not loaded", http.StatusInternalServerError)
@@ -450,12 +440,9 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	// Find the matching endpoint
 	endpoint, pathParams := s.findMatchingEndpoint(r.URL.Path)
 	if endpoint == nil {
-		log.Printf("No endpoint found for %s %s", r.Method, r.URL.Path)
 		http.NotFound(w, r)
 		return
 	}
-
-	log.Printf("Found endpoint %s for %s %s", endpoint.Path, r.Method, r.URL.Path)
 
 	// Check if the method is supported
 	methodDef, exists := endpoint.Methods[r.Method]
@@ -475,23 +462,23 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	// Prepare SQL query
 	sqlQuery := ""
-	
+
 	// Check if SQL should be loaded from a file
 	if methodDef.SQLFile != "" {
 		// Determine the API description file's directory to make relative paths work
 		apiDir := filepath.Dir(s.apiDescPath)
-		
+
 		// Build the SQL file path relative to the API description file
 		sqlFilePath := filepath.Join(apiDir, methodDef.SQLFile)
 		log.Printf("Loading SQL from file: %s", sqlFilePath)
-		
+
 		// Read the SQL file
 		sqlBytes, err := os.ReadFile(sqlFilePath)
 		if err != nil {
 			sendErrorResponse(w, fmt.Sprintf("Failed to read SQL file: %v", err), http.StatusInternalServerError)
 			return
 		}
-		
+
 		// Use the file contents as the SQL query
 		sqlQuery = string(sqlBytes)
 	} else {
@@ -536,7 +523,7 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 // Handle direct SQL query requests
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Handling query request from %s", r.URL.Path)
+	log.Printf("Query: %s", r.URL.Path)
 
 	if r.Method != "POST" {
 		sendErrorResponse(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
@@ -547,13 +534,12 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	var bodyBuffer bytes.Buffer
 	teeReader := io.TeeReader(r.Body, &bodyBuffer)
 
-	// Log the body as a string
-	bodyBytes, err := io.ReadAll(teeReader)
+	// Read the body into a buffer
+	_, err := io.ReadAll(teeReader)
 	if err != nil {
 		sendErrorResponse(w, "Failed to read request body", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Request Body: %s", string(bodyBytes))
 
 	// Decode the body into the QueryRequest struct
 	var req QueryRequest
@@ -639,6 +625,29 @@ func launchBrowser(url string) {
 
 // ===== Main Application =====
 
+// injectPgPort injects or overrides the port in a Postgres connection string (URL or DSN format)
+func injectPgPort(pgConnStr, pgPort string) string {
+	if pgConnStr == "" || pgPort == "" {
+		return pgConnStr
+	}
+	if strings.HasPrefix(pgConnStr, "postgres://") || strings.HasPrefix(pgConnStr, "postgresql://") {
+		u, err := url.Parse(pgConnStr)
+		if err == nil {
+			if u.Port() == "" || u.Port() != pgPort {
+				u.Host = u.Hostname() + ":" + pgPort
+				return u.String()
+			}
+		}
+		return pgConnStr
+	}
+	// DSN format: add or replace port=...
+	re := regexp.MustCompile(`port=\\d+`)
+	if re.MatchString(pgConnStr) {
+		return re.ReplaceAllString(pgConnStr, "port="+pgPort)
+	}
+	return pgConnStr + " port=" + pgPort
+}
+
 func main() {
 	// Set custom flag usage to display double dashes for word options
 	flag.Usage = func() {
@@ -661,6 +670,7 @@ func main() {
 	apiDesc := flag.String("api", "", "Path to API description file")
 	showResponses := flag.Bool("show-responses", false, "Enable logging of SQL query responses")
 	pgConnStr := flag.String("pg-conn", "", "PostgreSQL connection string (if provided, use PostgreSQL instead of SQLite)")
+	pgPort := flag.String("pg-port", "", "PostgreSQL port (optional, overrides port in --pg-conn if provided)")
 
 	// Short-form alias for show-responses
 	var shortShowResponses bool
@@ -681,7 +691,8 @@ func main() {
 
 	// Initialize server
 	showResponsesEnabled := *showResponses || shortShowResponses
-	server, err := NewServer("data.db", *pgConnStr, *extension, *apiDesc, showResponsesEnabled)
+	finalPgConnStr := injectPgPort(*pgConnStr, *pgPort)
+	server, err := NewServer("data.db", finalPgConnStr, *extension, *apiDesc, showResponsesEnabled)
 	if err != nil {
 		log.Fatal(err)
 	}
