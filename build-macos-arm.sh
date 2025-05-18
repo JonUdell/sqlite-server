@@ -51,7 +51,7 @@ rm -f xmlui-test-server-macos-arm
 # Set up the environment for go-sqlite3 with extension loading
 CGO_ENABLED=1 \
 CGO_CFLAGS="-DSQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_ALLOW_LOAD_EXTENSION" \
-go build -tags "sqlite3_load_extension" -v 
+go build -tags "sqlite3_load_extension" -v
 
 # Make sure extension is executable
 chmod 755 steampipe_sqlite_github.so
