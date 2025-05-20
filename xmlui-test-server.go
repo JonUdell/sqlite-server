@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	_ "github.com/lib/pq"           // PostgreSQL driver
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
@@ -57,6 +58,7 @@ type Server struct {
 	pathRegexps   map[string]*regexp.Regexp // Cache for compiled path regexps
 	showResponses bool                      // Flag to enable/disable response logging
 	dbType        string                    // Type of database: "sqlite" or "postgres"
+	mu            sync.Mutex                // Mutex to serialize DB access
 }
 
 // ===== Server Initialization =====
@@ -101,6 +103,9 @@ func NewServer(dbPath string, pgConnStr string, extensionPath string, apiDescPat
 
 		// If extension is provided, try to load it
 		if extensionPath != "" {
+			var mu sync.Mutex
+			mu.Lock()
+			defer mu.Unlock()
 			// Get the absolute path to the extension file
 			absPath, err := filepath.Abs(extensionPath)
 			if err != nil {
@@ -132,6 +137,7 @@ func NewServer(dbPath string, pgConnStr string, extensionPath string, apiDescPat
 		showResponses: showResponses,
 		dbType:        dbType,
 		apiDescPath:   apiDescPath,
+		mu:            sync.Mutex{},
 	}
 
 	// Load the API description if provided
@@ -318,6 +324,9 @@ func extractBodyParams(r *http.Request) (map[string]interface{}, error) {
 
 // Execute SQL query and return results as maps
 func (s *Server) executeQuery(sqlQuery string, params []interface{}) ([]map[string]interface{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Log the SQL query (just once)
 	log.Printf("SQL: %s", sqlQuery)
 
