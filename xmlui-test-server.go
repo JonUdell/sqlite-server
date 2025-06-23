@@ -676,6 +676,7 @@ func main() {
 	flag.StringVar(&portValue, "p", "8080", "Port to run the server on (shorthand)")
 	extension := flag.String("extension", "", "Path to SQLite extension to load")
 	apiDesc := flag.String("api", "", "Path to API description file")
+	dbPath := flag.String("db", "data.db", "Path to SQLite database file")
 	showResponses := flag.Bool("show-responses", false, "Enable logging of SQL query responses")
 	pgConnStr := flag.String("pg-conn", "", "PostgreSQL connection string (if provided, use PostgreSQL instead of SQLite)")
 	pgPort := flag.String("pg-port", "", "PostgreSQL port (optional, overrides port in --pg-conn if provided)")
@@ -700,7 +701,7 @@ func main() {
 	// Initialize server
 	showResponsesEnabled := *showResponses || shortShowResponses
 	finalPgConnStr := injectPgPort(*pgConnStr, *pgPort)
-	server, err := NewServer("data.db", finalPgConnStr, *extension, *apiDesc, showResponsesEnabled)
+	server, err := NewServer(*dbPath, finalPgConnStr, *extension, *apiDesc, showResponsesEnabled)
 	if err != nil {
 		log.Fatal(err)
 	}
