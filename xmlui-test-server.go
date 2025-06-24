@@ -773,8 +773,8 @@ func main() {
 	}
 
 	// Start server
-	log.Printf("Server listening on port %s...", portValue)
-	if err := http.ListenAndServe(":"+portValue, corsMiddleware(mux)); err != nil {
+	log.Printf("Server listening on localhost:%s...", portValue)
+	if err := http.ListenAndServe("127.0.0.1:"+portValue, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
