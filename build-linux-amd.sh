@@ -4,7 +4,10 @@
 
 set -e
 
-go mod tidy
+ go mod edit -dropreplace github.com/mattn/go-sqlite3
+ go mod tidy
+ go get github.com/mattn/go-sqlite3@v1.14.28
+
 
 # Create a clean working directory
 echo "Creating clean working directory..."
