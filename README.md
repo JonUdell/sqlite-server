@@ -70,7 +70,22 @@ Common elements:
         exec := func(s string) error {
                 cs := C.CString(s)
                 rv := C.sqlite3_exec(db, cs, nil, nil, nil)
-```		
+```
+
+Use the patched go-sqlite in go.mod for extension-enabled builds.
+
+```
+module xmlui-test-server
+
+go 1.21.4
+
+require (
+	github.com/lib/pq v1.10.9
+	github.com/mattn/go-sqlite3 v1.14.28
+)
+
+replace github.com/mattn/go-sqlite3 => ../go-sqlite3
+```
 
 The macOS ARM approach is much simpler because it doesn't need the custom SQLite build - the patched
 go-sqlite3 is sufficient.
