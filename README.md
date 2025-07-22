@@ -36,6 +36,45 @@ The basic binary, without extension loading, is available in /releases in multip
 
 The build scripts enhance the basic server with the ability to load SQLite extensions.
 
+Key differences between the Linux and macOS ARM build scripts:
+
+Linux (build-linux-amd.sh):
+  - Builds a custom SQLite library with extension loading flags
+  - Uses complex CGO linking against the custom SQLite (CGO_LDFLAGS="$SQLITE_INSTALL_DIR/lib/libsqlite3.a -lm 
+  -ldl")
+  - Downloads/builds sqlite-autoconf-3450200 with extension loading enabled
+  - Creates a build directory structure
+
+macOS ARM (build-macos-arm.sh):
+  - Much simpler - relies entirely on the patched go-sqlite3
+  - No custom SQLite build needed
+  - Just sets basic CGO flags (CGO_CFLAGS="-DSQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_ALLOW_LOAD_EXTENSION")
+  - No custom linking required
+
+Common elements:
+  - Both require a patched go-sqlite3 with C.sqlite3_enable_load_extension(db, 1);
+  - Both download the same Steampipe extension (platform-specific URLs)
+  - Both use go build -tags "sqlite3_load_extension"
+  - Both set the same CGO_CFLAGS for extension loading
+
+
+```
+--- a/sqlite3.go
++++ b/sqlite3.go
+@@ -1477,6 +1477,8 @@ func (d *SQLiteDriver) Open(dsn string) (driver.Conn, error) {
+                return nil, errors.New("sqlite succeeded without returning a database")
+        }
+ 
++        C.sqlite3_enable_load_extension(db, 1);
++
+        exec := func(s string) error {
+                cs := C.CString(s)
+                rv := C.sqlite3_exec(db, cs, nil, nil, nil)
+```		
+
+The macOS ARM approach is much simpler because it doesn't need the custom SQLite build - the patched
+go-sqlite3 is sufficient.
+
 In the Go code, extensions are loaded with:
 
 ```go
